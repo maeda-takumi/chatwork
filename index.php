@@ -46,14 +46,15 @@ $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 function extract_target_account_id(string $body): string
 {
     if (preg_match('/\[to:\s*([^\]\s]+)\]/i', $body, $matches)) {
-        return (string)$matches[1];
+        return trim((string)$matches[1]);
     }
 
     return '';
 }
 $targetAccountIds = [];
-foreach ($messages as $message) {
+foreach ($messages as $index => $message) {
     $targetAccountId = extract_target_account_id((string)($message['body'] ?? ''));
+    $messages[$index]['target_account_id'] = $targetAccountId;
     if ($targetAccountId !== '') {
         $targetAccountIds[$targetAccountId] = true;
     }
@@ -121,7 +122,7 @@ include __DIR__ . '/header.php';
       $senderLabel = $senderName !== '' ? $senderName : ('account_id: ' . (string)$message['account_id']);
       $senderIcon = trim((string)($message['user_icon'] ?? ''));
 
-      $targetAccountId = extract_target_account_id((string)($message['body'] ?? ''));
+      $targetAccountId = (string)($message['target_account_id'] ?? '');
 
       $targetUser = $targetAccountId !== '' ? ($targetUsersByAccountId[$targetAccountId] ?? null) : null;
       $targetName = trim((string)($targetUser['user_name'] ?? ''));
