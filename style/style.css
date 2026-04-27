@@ -401,7 +401,9 @@ code {
   left: 8px;
   width: 84px;
   height: 84px;
-  object-fit: contain;
+  object-fit: cover;
+  border-radius: 999px;
+  overflow: hidden;
   z-index: 3;
   opacity: 0;
   transform: scale(.6) rotate(-15deg);

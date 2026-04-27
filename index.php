@@ -209,28 +209,38 @@ include __DIR__ . '/header.php';
       foreach ($targetAccountIds as $targetAccountId) {
           $targetUsers[] = $targetUsersByAccountId[(string)$targetAccountId] ?? ['account_id' => (string)$targetAccountId];
       }
+      $targetEntries = [];
       if ($targetType === 'all') {
-          $targetLabel = '全員';
-          $targetIcon = 'img/all.png';
+          $targetEntries[] = [
+              'label' => '全員',
+              'icon' => 'img/all.png',
+          ];
       } else {
-          $targetLabels = [];
           foreach ($targetUsers as $targetUser) {
               $targetName = trim((string)($targetUser['user_name'] ?? ''));
               $targetAccountId = trim((string)($targetUser['account_id'] ?? ''));
+              $targetLabel = '';
               if ($targetName !== '') {
-                  $targetLabels[] = $targetName;
+                  $targetLabel = $targetName;
               } elseif ($targetAccountId !== '') {
-                  $targetLabels[] = 'account_id: ' . $targetAccountId;
+                  $targetLabel = 'account_id: ' . $targetAccountId;
+              }
+
+              if ($targetLabel !== '') {
+                  $targetEntries[] = [
+                      'label' => $targetLabel,
+                      'icon' => trim((string)($targetUser['user_icon'] ?? '')),
+                  ];
               }
           }
-          $targetLabel = $targetLabels !== [] ? implode(', ', $targetLabels) : '対象者なし';
-
-          if (count($targetUsers) === 1) {
-              $targetIcon = trim((string)($targetUsers[0]['user_icon'] ?? ''));
-          } else {
-              $targetIcon = 'img/all.png';
-          }
       }
+      if ($targetEntries === []) {
+          $targetEntries[] = [
+              'label' => '対象者なし',
+              'icon' => 'img/all.png',
+          ];
+      }
+
 
 
       $rawSendTime = trim((string)($message['send_time'] ?? ''));
@@ -266,12 +276,17 @@ include __DIR__ . '/header.php';
           <span><?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?></span>
         </div>
 
-        <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
-          <strong>対象者</strong>
-          <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/all.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/all.png';">
-
-          <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-        </div>
+        <?php foreach ($targetEntries as $targetEntry): ?>
+          <?php
+            $targetLabel = (string)($targetEntry['label'] ?? '対象者なし');
+            $targetIcon = trim((string)($targetEntry['icon'] ?? ''));
+          ?>
+          <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
+            <strong>対象者</strong>
+            <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/all.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/all.png';">
+            <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+          </div>
+        <?php endforeach; ?>
       </div>
 
       <div class="message-body"><?php echo nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')); ?></div>
