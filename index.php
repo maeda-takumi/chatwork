@@ -14,73 +14,106 @@ function tme(string $path): string
     return file_exists($fullPath) ? (string)filemtime($fullPath) : (string)time();
 }
 
+function tableColumns(PDO $pdo, string $table): array
+{
+    $stmt = $pdo->query('PRAGMA table_info(' . $table . ')');
+    if ($stmt === false) {
+        return [];
+    }
+
+    $result = [];
+    foreach ($stmt->fetchAll(PDO::FETCH_ASSOC) as $column) {
+        $result[(string)$column['name']] = true;
+    }
+
+    return $result;
+}
+
+function resolveIconUrl(string $icon): string
+{
+    $trimmed = trim($icon);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    if (preg_match('/^https?:\/\//i', $trimmed) === 1) {
+        return $trimmed;
+    }
+
+    $iconFile = __DIR__ . '/' . ltrim($trimmed, '/');
+    return file_exists($iconFile) ? $trimmed : '';
+}
 function initDatabase(PDO $pdo): void
 {
     $pdo->exec(
-        'CREATE TABLE IF NOT EXISTS webhook_events (
+        'CREATE TABLE IF NOT EXISTS messages (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            received_at TEXT NOT NULL,
             webhook_setting_id TEXT,
-            webhook_name TEXT,
-            event_type TEXT,
+            webhook_event_type TEXT,
+            webhook_event_time INTEGER,
+            account_id TEXT,
             room_id TEXT,
             message_id TEXT,
             from_account_id TEXT,
-            from_account_name TEXT,
+            to_account_id TEXT,
             body TEXT,
-            event_source_key TEXT NOT NULL,
-            raw_json TEXT NOT NULL
-        )'
-    );
-
-    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_event_source_key_unique ON webhook_events(event_source_key)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_received_at ON webhook_events(received_at)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_webhook_setting_id ON webhook_events(webhook_setting_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_room_id ON webhook_events(room_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_message_id ON webhook_events(message_id)");
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_event_type ON webhook_events(event_type)");
-
-    $pdo->exec(
-        'CREATE TABLE IF NOT EXISTS users (
-            account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chatwork_account_id TEXT,
-            account_name TEXT,
-            mention_token TEXT,
-            icon_path TEXT,
+            send_time INTEGER,
+            update_time INTEGER,
+            raw_json TEXT,
+            received_at TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )'
     );
 
-    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_messages_webhook_event_type ON messages(webhook_event_type)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_messages_room_id ON messages(room_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_messages_message_id ON messages(message_id)');
 
-    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS users (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_name TEXT,
+            user_id TEXT,
+            user_icon TEXT
+        )'
+    );
 
-    $columns = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
-    $columnMap = [];
-    foreach ($columns as $column) {
-        $columnMap[(string)$column['name']] = $column;
-    }
-    $accountIdType = strtoupper((string)($columnMap['account_id']['type'] ?? ''));
-    $needsMigration = !isset($columnMap['chatwork_account_id'])
-        || !isset($columnMap['icon_path'])
-        || strpos($accountIdType, 'INT') === false;
+    $userColumns = tableColumns($pdo, 'users');
+    $needsUserMigration = !isset($userColumns['id'])
+        || !isset($userColumns['user_name'])
+        || !isset($userColumns['user_id'])
+        || !isset($userColumns['user_icon'])
+        || count($userColumns) !== 4;
 
-    if ($needsMigration) {
+    if ($needsUserMigration) {
+        $idExpr = isset($userColumns['id'])
+            ? 'id'
+            : (isset($userColumns['account_id']) ? 'account_id' : 'NULL');
+        $userNameExpr = isset($userColumns['user_name'])
+            ? 'user_name'
+            : (isset($userColumns['account_name']) ? 'account_name' : 'NULL');
+        $userIdExpr = isset($userColumns['user_id'])
+            ? 'user_id'
+            : (isset($userColumns['chatwork_account_id']) ? 'chatwork_account_id' : 'NULL');
+        $userIconExpr = isset($userColumns['user_icon'])
+            ? 'user_icon'
+            : (isset($userColumns['icon_path']) ? 'icon_path' : 'NULL');
         $pdo->exec(
             'CREATE TABLE users_new (
-                account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chatwork_account_id TEXT,
-                account_name TEXT,
-                mention_token TEXT,
-                icon_path TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_name TEXT,
+                user_id TEXT,
+                user_icon TEXT
             )'
         );
         $pdo->exec(
-            'INSERT INTO users_new (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
-             SELECT account_id, account_name, mention_token, NULL, created_at, updated_at
+            'INSERT INTO users_new (id, user_name, user_id, user_icon)
+             SELECT
+                ' . $idExpr . ',
+                ' . $userNameExpr . ',
+                ' . $userIdExpr . ',
+                ' . $userIconExpr . '
              FROM users'
         );
         $pdo->exec('DROP TABLE users');
@@ -88,23 +121,56 @@ function initDatabase(PDO $pdo): void
         $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
         $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
     }
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_users_user_id_unique ON users(user_id)');
 
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS rooms (
-            room_id TEXT PRIMARY KEY,
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            room_id TEXT,
             room_name TEXT,
-            icon_path TEXT,
-            is_enabled INTEGER NOT NULL DEFAULT 1,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            room_icon TEXT
         )'
     );
 
-    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_rooms_enabled ON rooms(is_enabled)");
+    $roomColumns = tableColumns($pdo, 'rooms');
+    $needsRoomMigration = !isset($roomColumns['id'])
+        || !isset($roomColumns['room_id'])
+        || !isset($roomColumns['room_name'])
+        || !isset($roomColumns['room_icon'])
+        || count($roomColumns) !== 4;
+
+    if ($needsRoomMigration) {
+        $roomIconExpr = isset($roomColumns['room_icon'])
+            ? 'room_icon'
+            : (isset($roomColumns['icon_path']) ? 'icon_path' : 'NULL');
+
+        $pdo->exec(
+            'CREATE TABLE rooms_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                room_id TEXT,
+                room_name TEXT,
+                room_icon TEXT
+            )'
+        );
+
+        $pdo->exec(
+            'INSERT INTO rooms_new (room_id, room_name, room_icon)
+             SELECT
+                room_id,
+                room_name,
+                ' . $roomIconExpr . '
+             FROM rooms'
+        );
+
+        $pdo->exec('DROP TABLE rooms');
+        $pdo->exec('ALTER TABLE rooms_new RENAME TO rooms');
+    }
+    $pdo->exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_rooms_room_id_unique ON rooms(room_id)');
 }
 $search = trim((string)($_GET['search'] ?? ''));
 $selectedRoomId = trim((string)($_GET['room_id'] ?? ''));
 $page   = max(1, (int)($_GET['page'] ?? 1));
+
 $limit  = 25;
 $offset = ($page - 1) * $limit;
 
@@ -125,9 +191,8 @@ if (file_exists($dbPath)) {
         initDatabase($pdo);
 
         $roomsStmt = $pdo->query(
-            'SELECT room_id, room_name, icon_path
+            'SELECT room_id, room_name, room_icon
              FROM rooms
-             WHERE is_enabled = 1
              ORDER BY COALESCE(NULLIF(room_name, ""), room_id) ASC'
         );
         $rooms = $roomsStmt->fetchAll();
@@ -139,19 +204,19 @@ if (file_exists($dbPath)) {
 
         if ($search !== '') {
             $whereParts[] = '(
-                event_type LIKE :search
-                OR room_id LIKE :search
-                OR message_id LIKE :search
-                OR from_account_id LIKE :search
-                OR from_account_name LIKE :search
-                OR body LIKE :search
-                OR raw_json LIKE :search
+                m.webhook_event_type LIKE :search
+                OR m.room_id LIKE :search
+                OR m.message_id LIKE :search
+                OR m.from_account_id LIKE :search
+                OR u.user_name LIKE :search
+                OR m.body LIKE :search
+                OR m.raw_json LIKE :search
             )';
             $params[':search'] = '%' . $search . '%';
         }
 
         if ($selectedRoomId !== '') {
-            $whereParts[] = 'room_id = :room_id';
+            $whereParts[] = 'm.room_id = :room_id';
             $params[':room_id'] = $selectedRoomId;
         }
 
@@ -160,7 +225,12 @@ if (file_exists($dbPath)) {
             $where = 'WHERE ' . implode(' AND ', $whereParts);
         }
 
-        $countSql = "SELECT COUNT(*) FROM webhook_events {$where}";
+        $countSql = "
+            SELECT COUNT(*)
+            FROM messages m
+            LEFT JOIN users u ON u.user_id = m.from_account_id
+            {$where}
+        ";
         $countStmt = $pdo->prepare($countSql);
         foreach ($params as $key => $value) {
             $countStmt->bindValue($key, $value, PDO::PARAM_STR);
@@ -176,17 +246,18 @@ if (file_exists($dbPath)) {
 
         $listSql = "
             SELECT
-                id,
-                received_at,
-                event_type,
-                room_id,
-                message_id,
-                from_account_id,
-                from_account_name,
-                body
-            FROM webhook_events
+                m.id,
+                m.received_at,
+                m.webhook_event_type,
+                m.room_id,
+                m.message_id,
+                m.from_account_id,
+                m.body,
+                COALESCE(NULLIF(u.user_name, ''), m.from_account_id, '') AS sender_name
+            FROM messages m
+            LEFT JOIN users u ON u.user_id = m.from_account_id
             {$where}
-            ORDER BY id DESC
+            ORDER BY m.id DESC
             LIMIT :limit OFFSET :offset
         ";
 
@@ -267,9 +338,9 @@ include __DIR__ . '/header.php';
                     <?php
                     $roomId = (string)$room['room_id'];
                     $roomName = (string)($room['room_name'] ?? '');
-                    $iconPath = (string)($room['icon_path'] ?? ('img/' . $roomId . '.png'));
-                    $iconFile = __DIR__ . '/' . ltrim($iconPath, '/');
-                    $iconUrl = file_exists($iconFile) ? $iconPath : '';
+                    $iconPath = (string)($room['room_icon'] ?? ('img/' . $roomId . '.png'));
+                    $iconUrl = resolveIconUrl($iconPath);
+
                     $query = ['room_id' => $roomId];
                     if ($search !== '') {
                         $query['search'] = $search;
@@ -344,15 +415,15 @@ include __DIR__ . '/header.php';
                         <?php foreach ($rows as $row): ?>
                             <tr>
                                 <td class="mono"><?php echo h((string)$row['id']); ?></td>
-                                <td class="mono"><?php echo h($row['received_at']); ?></td>
+                                <td class="mono"><?php echo h((string)$row['received_at']); ?></td>
                                 <td>
-                                    <span class="badge"><?php echo h($row['event_type']); ?></span>
+                                    <span class="badge"><?php echo h((string)$row['webhook_event_type']); ?></span>
                                 </td>
-                                <td class="mono"><?php echo h($row['room_id']); ?></td>
-                                <td><?php echo h($row['from_account_name']); ?></td>
+                                <td class="mono"><?php echo h((string)$row['room_id']); ?></td>
+                                <td><?php echo h((string)$row['sender_name']); ?></td>
                                 <td>
-                                    <div class="message-cell" title="<?php echo h($row['body']); ?>">
-                                        <?php echo nl2br(h($row['body'])); ?>
+                                    <div class="message-cell" title="<?php echo h((string)$row['body']); ?>">
+                                        <?php echo nl2br(h((string)$row['body'])); ?>
                                     </div>
                                 </td>
                             </tr>
