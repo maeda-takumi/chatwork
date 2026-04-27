@@ -74,7 +74,6 @@ try {
             body,
             send_time,
             message_id
-            send_time
         ) VALUES (
             :room_id,
             :account_id,
