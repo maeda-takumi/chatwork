@@ -5,7 +5,7 @@ require_once __DIR__ . '/db.php';
 
 function get_chatwork_api_token(PDO $pdo): string
 {
-    $envToken = trim((string)getenv('CHATWORK_API_TOKEN'));
+    $envToken = "fee574510c5ce22d78b85282a0a8acaa";
     if ($envToken !== '') {
         return $envToken;
     }

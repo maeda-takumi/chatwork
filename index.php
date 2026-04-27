@@ -237,7 +237,7 @@ include __DIR__ . '/header.php';
       if ($targetEntries === []) {
           $targetEntries[] = [
               'label' => '対象者なし',
-              'icon' => 'img/all.png',
+              'icon' => 'img/noimage.png',
           ];
       }
 
