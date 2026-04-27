@@ -18,16 +18,57 @@ function initDatabase(PDO $pdo): void
 {
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS users (
-            account_id TEXT PRIMARY KEY,
+            account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chatwork_account_id TEXT,
             account_name TEXT,
             mention_token TEXT,
+            icon_path TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )'
     );
+    $columns = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
+    $columnMap = [];
+    foreach ($columns as $column) {
+        $columnMap[(string)$column['name']] = $column;
+    }
+    $accountIdType = strtoupper((string)($columnMap['account_id']['type'] ?? ''));
+    $needsMigration = !isset($columnMap['chatwork_account_id'])
+        || !isset($columnMap['icon_path'])
+        || strpos($accountIdType, 'INT') === false;
+
+    if ($needsMigration) {
+        $pdo->exec(
+            'CREATE TABLE users_new (
+                account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chatwork_account_id TEXT,
+                account_name TEXT,
+                mention_token TEXT,
+                icon_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )'
+        );
+
+        $pdo->exec(
+            'INSERT INTO users_new (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
+             SELECT
+                account_id,
+                account_name,
+                mention_token,
+                NULL,
+                created_at,
+                updated_at
+             FROM users'
+        );
+
+        $pdo->exec('DROP TABLE users');
+        $pdo->exec('ALTER TABLE users_new RENAME TO users');
+    }
 
     $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
 
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS rooms (
             room_id TEXT PRIMARY KEY,
@@ -127,23 +168,25 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
         }
 
         if ($target === 'user') {
-            $accountId = trim((string)($_POST['account_id'] ?? ''));
+            $accountId = (int)($_POST['account_id'] ?? 0);
+            $chatworkAccountId = trim((string)($_POST['chatwork_account_id'] ?? ''));
             $accountName = trim((string)($_POST['account_name'] ?? ''));
             $mentionToken = trim((string)($_POST['mention_token'] ?? ''));
-
-            if ($accountId === '') {
-                redirectWithStatus('users', 'error', 'アカウントIDは必須です。');
+            $iconPath = trim((string)($_POST['icon_path'] ?? ''));
+            if ($mentionToken === '' && $chatworkAccountId !== '') {
+                $mentionToken = '[To:' . $chatworkAccountId . ']';
             }
 
             if ($action === 'create') {
                 $stmt = $pdo->prepare(
-                    'INSERT INTO users (account_id, account_name, mention_token, created_at, updated_at)
-                     VALUES (:account_id, :account_name, :mention_token, :created_at, :updated_at)'
+                    'INSERT INTO users (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
+                     VALUES (:chatwork_account_id, :account_name, :mention_token, :icon_path, :created_at, :updated_at)'
                 );
                 $stmt->execute([
-                    ':account_id' => $accountId,
+                    ':chatwork_account_id' => $chatworkAccountId,
                     ':account_name' => $accountName,
                     ':mention_token' => $mentionToken,
+                    ':icon_path' => $iconPath,
                     ':created_at' => $now,
                     ':updated_at' => $now,
                 ]);
@@ -151,16 +194,23 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
 
             if ($action === 'update') {
+                if ($accountId <= 0) {
+                    redirectWithStatus('users', 'error', '更新対象のIDが不正です。');
+                }
                 $stmt = $pdo->prepare(
                     'UPDATE users
-                     SET account_name = :account_name,
+                     SET chatwork_account_id = :chatwork_account_id,
+                         account_name = :account_name,
                          mention_token = :mention_token,
+                         icon_path = :icon_path,
                          updated_at = :updated_at
                      WHERE account_id = :account_id'
                 );
                 $stmt->execute([
+                    ':chatwork_account_id' => $chatworkAccountId,
                     ':account_name' => $accountName,
                     ':mention_token' => $mentionToken,
+                    ':icon_path' => $iconPath,
                     ':updated_at' => $now,
                     ':account_id' => $accountId,
                 ]);
@@ -168,6 +218,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
             }
 
             if ($action === 'delete') {
+                if ($accountId <= 0) {
+                    redirectWithStatus('users', 'error', '削除対象のIDが不正です。');
+                }
                 $stmt = $pdo->prepare('DELETE FROM users WHERE account_id = :account_id');
                 $stmt->execute([':account_id' => $accountId]);
                 redirectWithStatus('users', 'success', 'ユーザーを削除しました。');
@@ -181,7 +234,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? 'GET') === 'POST') {
 }
 
 $rooms = $pdo->query('SELECT room_id, room_name, icon_path, is_enabled, created_at, updated_at FROM rooms ORDER BY updated_at DESC')->fetchAll();
-$users = $pdo->query('SELECT account_id, account_name, mention_token, created_at, updated_at FROM users ORDER BY updated_at DESC')->fetchAll();
+$users = $pdo->query('SELECT account_id, chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at FROM users ORDER BY updated_at DESC')->fetchAll();
 
 include __DIR__ . '/header.php';
 ?>
@@ -275,9 +328,10 @@ include __DIR__ . '/header.php';
         <form method="post" class="crud-form grid-4">
             <input type="hidden" name="target" value="user">
             <input type="hidden" name="action" value="create">
-            <input name="account_id" class="search-input" placeholder="アカウントID" required>
+            <input name="chatwork_account_id" class="search-input" placeholder="ChatworkアカウントID">
             <input name="account_name" class="search-input" placeholder="表示名">
             <input name="mention_token" class="search-input" placeholder="メンショントークン (例: [To:123])">
+            <input name="icon_path" class="search-input" placeholder="アイコンパス (例: img/user-1.png)">
             <button type="submit" class="btn btn-primary">追加</button>
         </form>
     </section>
@@ -288,8 +342,10 @@ include __DIR__ . '/header.php';
             <table class="data-table">
                 <thead>
                     <tr>
-                        <th>アカウントID</th>
+                        <th>ID</th>
+                        <th>Chatwork ID</th>
                         <th>表示名</th>
+                        <th>アイコン</th>
                         <th>メンション</th>
                         <th>更新日時</th>
                         <th>操作</th>
@@ -297,7 +353,7 @@ include __DIR__ . '/header.php';
                 </thead>
                 <tbody>
                     <?php if (empty($users)): ?>
-                        <tr><td colspan="5" class="empty-cell">ユーザーはまだありません。</td></tr>
+                        <tr><td colspan="7" class="empty-cell">ユーザーはまだありません。</td></tr>
                     <?php else: ?>
                         <?php foreach ($users as $user): ?>
                             <tr>
@@ -307,7 +363,9 @@ include __DIR__ . '/header.php';
                                         <input type="hidden" name="account_id" value="<?php echo h($user['account_id']); ?>">
                                         <?php echo h($user['account_id']); ?>
                                     </td>
+                                    <td><input name="chatwork_account_id" class="inline-input" value="<?php echo h($user['chatwork_account_id']); ?>"></td>
                                     <td><input name="account_name" class="inline-input" value="<?php echo h($user['account_name']); ?>"></td>
+                                    <td><input name="icon_path" class="inline-input" value="<?php echo h($user['icon_path']); ?>"></td>
                                     <td><input name="mention_token" class="inline-input" value="<?php echo h($user['mention_token']); ?>"></td>
                                     <td class="mono"><?php echo h($user['updated_at']); ?></td>
                                     <td class="actions-cell">

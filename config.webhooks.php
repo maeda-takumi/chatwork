@@ -3,9 +3,9 @@ declare(strict_types=1);
 
 return [
     [
-        'name' => '演者グループ',
+        'name' => 'testgroup',
         'webhook_setting_id' => '37790',
-        'room_id' => '359775481',
+        'room_id' => '404615917',
         'token' => '2s6609ED4gmxL8N7L7E+9I28YMzjPZhdQVmcm2G8OSA=',
         'enabled' => true,
     ],
@@ -18,6 +18,13 @@ return [
     ],
     [
         'name' => '【連絡】サポートチーム',
+        'webhook_setting_id' => '37914',
+        'room_id' => '407745157',
+        'token' => 'aBgH6ut/uM/NQ7ss9YIxs9hOxUYkMKkjQ0wcrSLq+AA=',
+        'enabled' => true,
+    ],
+    [
+        'name' => 'testgroup',
         'webhook_setting_id' => '37914',
         'room_id' => '407745157',
         'token' => 'aBgH6ut/uM/NQ7ss9YIxs9hOxUYkMKkjQ0wcrSLq+AA=',

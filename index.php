@@ -42,15 +42,52 @@ function initDatabase(PDO $pdo): void
 
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS users (
-            account_id TEXT PRIMARY KEY,
+            account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chatwork_account_id TEXT,
             account_name TEXT,
             mention_token TEXT,
+            icon_path TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )'
     );
 
     $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
+
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
+
+    $columns = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
+    $columnMap = [];
+    foreach ($columns as $column) {
+        $columnMap[(string)$column['name']] = $column;
+    }
+    $accountIdType = strtoupper((string)($columnMap['account_id']['type'] ?? ''));
+    $needsMigration = !isset($columnMap['chatwork_account_id'])
+        || !isset($columnMap['icon_path'])
+        || strpos($accountIdType, 'INT') === false;
+
+    if ($needsMigration) {
+        $pdo->exec(
+            'CREATE TABLE users_new (
+                account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chatwork_account_id TEXT,
+                account_name TEXT,
+                mention_token TEXT,
+                icon_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )'
+        );
+        $pdo->exec(
+            'INSERT INTO users_new (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
+             SELECT account_id, account_name, mention_token, NULL, created_at, updated_at
+             FROM users'
+        );
+        $pdo->exec('DROP TABLE users');
+        $pdo->exec('ALTER TABLE users_new RENAME TO users');
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
+    }
 
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS rooms (
@@ -220,7 +257,7 @@ include __DIR__ . '/header.php';
                 <a
                     href="index.php<?php echo $allRoomsQuery !== '' ? '?' . h($allRoomsQuery) : ''; ?>"
                     class="room-filter-btn <?php echo $selectedRoomId === '' ? 'is-active' : ''; ?>"
-                    title="すべてのルーム"
+                    data-tooltip="すべてのルーム"
                     aria-label="すべてのルーム"
                 >
                     <span class="room-filter-all">ALL</span>
@@ -243,7 +280,7 @@ include __DIR__ . '/header.php';
                     <a
                         href="index.php?<?php echo h($roomQuery); ?>"
                         class="room-filter-btn <?php echo $selectedRoomId === $roomId ? 'is-active' : ''; ?>"
-                        title="<?php echo h($buttonLabel); ?>"
+                        data-tooltip="<?php echo h($buttonLabel); ?>"
                         aria-label="<?php echo h($buttonLabel); ?>"
                     >
                         <?php if ($iconUrl !== ''): ?>

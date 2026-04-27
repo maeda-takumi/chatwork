@@ -80,15 +80,53 @@ SQL;
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_event_type ON webhook_events(event_type)");
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS users (
+            account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            chatwork_account_id TEXT,
             account_id TEXT PRIMARY KEY,
             account_name TEXT,
             mention_token TEXT,
+            icon_path TEXT,
             created_at TEXT NOT NULL,
             updated_at TEXT NOT NULL
         )'
     );
 
     $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
+
+    $columns = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
+    $columnMap = [];
+    foreach ($columns as $column) {
+        $columnMap[(string)$column['name']] = $column;
+    }
+    $accountIdType = strtoupper((string)($columnMap['account_id']['type'] ?? ''));
+    $needsMigration = !isset($columnMap['chatwork_account_id'])
+        || !isset($columnMap['icon_path'])
+        || strpos($accountIdType, 'INT') === false;
+
+    if ($needsMigration) {
+        $pdo->exec(
+            'CREATE TABLE users_new (
+                account_id INTEGER PRIMARY KEY AUTOINCREMENT,
+                chatwork_account_id TEXT,
+                account_name TEXT,
+                mention_token TEXT,
+                icon_path TEXT,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            )'
+        );
+        $pdo->exec(
+            'INSERT INTO users_new (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
+             SELECT account_id, account_name, mention_token, NULL, created_at, updated_at
+             FROM users'
+        );
+        $pdo->exec('DROP TABLE users');
+        $pdo->exec('ALTER TABLE users_new RENAME TO users');
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
+        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
+    }
+
 
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS rooms (
@@ -250,9 +288,9 @@ try {
 
     if ($fromAccountId !== '') {
         $userStmt = $pdo->prepare(
-            'INSERT INTO users (account_id, account_name, mention_token, created_at, updated_at)
-             VALUES (:account_id, :account_name, :mention_token, :created_at, :updated_at)
-             ON CONFLICT(account_id) DO UPDATE SET
+            'INSERT INTO users (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
+             VALUES (:chatwork_account_id, :account_name, :mention_token, :icon_path, :created_at, :updated_at)
+             ON CONFLICT(chatwork_account_id) DO UPDATE SET
                  account_name = CASE
                      WHEN excluded.account_name IS NOT NULL AND excluded.account_name <> "" THEN excluded.account_name
                      ELSE users.account_name
@@ -262,9 +300,10 @@ try {
         );
 
         $userStmt->execute([
-            ':account_id' => $fromAccountId,
+            ':chatwork_account_id' => $fromAccountId,
             ':account_name' => $fromAccountName,
             ':mention_token' => '[To:' . $fromAccountId . ']',
+            ':icon_path' => 'img/user-' . $fromAccountId . '.png',
             ':created_at' => $now,
             ':updated_at' => $now,
         ]);
@@ -273,16 +312,16 @@ try {
     $mentionIds = extractMentionAccountIds($body);
     if (!empty($mentionIds)) {
         $mentionStmt = $pdo->prepare(
-            'INSERT INTO users (account_id, account_name, mention_token, created_at, updated_at)
-             VALUES (:account_id, NULL, :mention_token, :created_at, :updated_at)
-             ON CONFLICT(account_id) DO UPDATE SET
+            'INSERT INTO users (chatwork_account_id, account_name, mention_token, created_at, updated_at)
+             VALUES (:chatwork_account_id, NULL, :mention_token, :created_at, :updated_at)
+             ON CONFLICT(chatwork_account_id) DO UPDATE SET
                  mention_token = excluded.mention_token,
                  updated_at = excluded.updated_at'
         );
 
         foreach ($mentionIds as $accountId) {
             $mentionStmt->execute([
-                ':account_id' => $accountId,
+                ':chatwork_account_id' => $accountId,
                 ':mention_token' => '[To:' . $accountId . ']',
                 ':created_at' => $now,
                 ':updated_at' => $now,
