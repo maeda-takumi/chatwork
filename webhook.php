@@ -51,7 +51,7 @@ try {
         respondError(403, 'webhook_setting_not_allowed', ['webhook_setting_id' => $webhookSettingId]);
     }
 
-    $verified = verifyRequest($headers, $rawBody, (string)$setting['token']);
+    $verified = verifyRequest($headers, $_GET, $rawBody, (string)$setting['token']);
     if (!$verified) {
         respondError(401, 'signature_or_token_mismatch', ['webhook_setting_id' => $webhookSettingId]);
     }
@@ -136,12 +136,13 @@ function createTableIfNotExists(PDO $pdo): void
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_webhooks_received_at ON webhooks (received_at)');
 }
 
-function verifyRequest(array $headers, string $rawBody, string $token): bool
+function verifyRequest(array $headers, array $queryParams, string $rawBody, string $token): bool
 {
-    $signatureHeader = $headers['x-chatworkwebhooksignature'] ?? null;
-    if (is_string($signatureHeader) && $signatureHeader !== '') {
+    $signatureCandidate = findSignatureCandidate($headers, $queryParams);
+    if ($signatureCandidate !== null && $signatureCandidate !== '') {
         $expectedSignature = base64_encode(hash_hmac('sha256', $rawBody, $token, true));
-        return hash_equals($expectedSignature, trim($signatureHeader));
+        
+        return hash_equals($expectedSignature, $signatureCandidate);
     }
 
     $tokenHeader = $headers['x-chatworktoken'] ?? ($headers['x-chatwork-webhook-token'] ?? null);
@@ -152,6 +153,24 @@ function verifyRequest(array $headers, string $rawBody, string $token): bool
     return false;
 }
 
+function findSignatureCandidate(array $headers, array $queryParams): ?string
+{
+    $signatureCandidates = [
+        $headers['x-chatworkwebhooksignature'] ?? null,
+        $queryParams['chatwork_webhook_signature'] ?? null,
+    ];
+
+    foreach ($signatureCandidates as $candidate) {
+        if (!is_string($candidate) || trim($candidate) === '') {
+            continue;
+        }
+
+        // Query parameter signatures may include spaces when '+' is not URL-encoded.
+        return str_replace(' ', '+', trim($candidate));
+    }
+
+    return null;
+}
 function findEnabledSettingById(array $config, string $webhookSettingId): ?array
 {
     foreach ($config as $setting) {
