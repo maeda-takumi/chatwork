@@ -194,3 +194,131 @@ code {
 @keyframes slideUp {
   to { opacity: 1; transform: translateY(0); }
 }
+
+.horizontal-form {
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  align-items: end;
+}
+
+.horizontal-form .form-actions {
+  align-self: end;
+}
+
+.card-with-icon {
+  display: flex;
+  gap: .9rem;
+  align-items: flex-start;
+}
+
+.entity-preview {
+  width: 52px;
+  height: 52px;
+  border-radius: 10px;
+  object-fit: cover;
+  border: 1px solid rgba(255, 255, 255, .2);
+  flex: 0 0 52px;
+}
+
+.card-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.search-row {
+  margin-bottom: .9rem;
+}
+
+.icon-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .55rem;
+}
+
+.icon-filter-button {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.24);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-decoration: none;
+  background: rgba(255,255,255,.06);
+  color: var(--text);
+  font-size: .73rem;
+}
+
+.icon-filter-button img {
+  width: 100%;
+  height: 100%;
+  border-radius: 9px;
+  object-fit: cover;
+}
+
+.icon-filter-button.active {
+  border-color: rgba(139, 92, 246, .95);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, .35);
+}
+
+.message-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .8rem;
+  margin-bottom: .8rem;
+}
+
+.entity-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .3rem .5rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .08);
+  border: 1px solid rgba(255,255,255,.15);
+  position: relative;
+}
+
+.entity-chip img {
+  width: 30px;
+  height: 30px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.entity-chip span {
+  font-size: .8rem;
+  color: var(--muted);
+}
+
+.entity-chip::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%) scale(.98);
+  transform-origin: bottom center;
+  background: rgba(9, 13, 30, .98);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 8px;
+  padding: .35rem .55rem;
+  font-size: .75rem;
+  color: #fff;
+  opacity: 0;
+  pointer-events: none;
+  white-space: nowrap;
+  transition: opacity .15s ease, transform .15s ease;
+}
+
+.entity-chip:hover::after {
+  opacity: 1;
+  transform: translateX(-50%) scale(1);
+}
+
+.message-body {
+  padding: .75rem;
+  border-radius: 10px;
+  background: rgba(255,255,255,.06);
+  line-height: 1.6;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

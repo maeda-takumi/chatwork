@@ -60,7 +60,7 @@ include __DIR__ . '/header.php';
   <?php if ($error !== ''): ?>
     <p class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></p>
   <?php endif; ?>
-  <form method="post" class="admin-form">
+  <form method="post" class="admin-form horizontal-form">
     <input type="hidden" name="action" value="create">
     <label>ルーム名<input type="text" name="room_name" required></label>
     <label>room_id<input type="text" name="room_id" required></label>
@@ -71,23 +71,33 @@ include __DIR__ . '/header.php';
 
 <section class="cards" aria-label="ルーム一覧">
   <?php foreach ($rooms as $room): ?>
-    <article class="card glass">
-      <h3>#<?php echo (int)$room['id']; ?></h3>
-      <form method="post" class="admin-form inline-form">
-        <input type="hidden" name="action" value="update">
-        <input type="hidden" name="id" value="<?php echo (int)$room['id']; ?>">
-        <label>ルーム名<input type="text" name="room_name" value="<?php echo htmlspecialchars($room['room_name'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
-        <label>room_id<input type="text" name="room_id" value="<?php echo htmlspecialchars($room['room_id'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
-        <label>アイコンパス<input type="text" name="room_icon" value="<?php echo htmlspecialchars($room['room_icon'], ENT_QUOTES, 'UTF-8'); ?>"></label>
-        <div class="form-actions">
-          <button type="submit">更新</button>
-        </div>
-      </form>
-      <form method="post" onsubmit="return confirm('このルームを削除しますか？');">
-        <input type="hidden" name="action" value="delete">
-        <input type="hidden" name="id" value="<?php echo (int)$room['id']; ?>">
-        <button type="submit" class="danger">削除</button>
-      </form>
+    <article class="card glass card-with-icon">
+      <?php if (trim((string)$room['room_icon']) !== ''): ?>
+        <img
+          class="entity-preview"
+          src="<?php echo htmlspecialchars($room['room_icon'], ENT_QUOTES, 'UTF-8'); ?>"
+          alt="<?php echo htmlspecialchars($room['room_name'], ENT_QUOTES, 'UTF-8'); ?>"
+          onerror="this.onerror=null;this.src='img/noimage.png';"
+        >
+      <?php endif; ?>
+      <div class="card-main">
+        <h3>#<?php echo (int)$room['id']; ?></h3>
+        <form method="post" class="admin-form inline-form horizontal-form">
+          <input type="hidden" name="action" value="update">
+          <input type="hidden" name="id" value="<?php echo (int)$room['id']; ?>">
+          <label>ルーム名<input type="text" name="room_name" value="<?php echo htmlspecialchars($room['room_name'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
+          <label>room_id<input type="text" name="room_id" value="<?php echo htmlspecialchars($room['room_id'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
+          <label>アイコンパス<input type="text" name="room_icon" value="<?php echo htmlspecialchars($room['room_icon'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+          <div class="form-actions">
+            <button type="submit">更新</button>
+          </div>
+        </form>
+        <form method="post" onsubmit="return confirm('このルームを削除しますか？');">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="<?php echo (int)$room['id']; ?>">
+          <button type="submit" class="danger">削除</button>
+        </form>
+      </div>
     </article>
   <?php endforeach; ?>
 </section>

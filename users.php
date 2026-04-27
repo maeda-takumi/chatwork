@@ -60,7 +60,7 @@ include __DIR__ . '/header.php';
   <?php if ($error !== ''): ?>
     <p class="error"><?php echo htmlspecialchars($error, ENT_QUOTES, 'UTF-8'); ?></p>
   <?php endif; ?>
-  <form method="post" class="admin-form">
+  <form method="post" class="admin-form horizontal-form">
     <input type="hidden" name="action" value="create">
     <label>ユーザ名<input type="text" name="user_name" required></label>
     <label>account_id<input type="text" name="account_id" required></label>
@@ -71,23 +71,33 @@ include __DIR__ . '/header.php';
 
 <section class="cards" aria-label="ユーザ一覧">
   <?php foreach ($users as $user): ?>
-    <article class="card glass">
-      <h3>#<?php echo (int)$user['id']; ?></h3>
-      <form method="post" class="admin-form inline-form">
-        <input type="hidden" name="action" value="update">
-        <input type="hidden" name="id" value="<?php echo (int)$user['id']; ?>">
-        <label>ユーザ名<input type="text" name="user_name" value="<?php echo htmlspecialchars($user['user_name'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
-        <label>account_id<input type="text" name="account_id" value="<?php echo htmlspecialchars($user['account_id'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
-        <label>アイコンパス<input type="text" name="user_icon" value="<?php echo htmlspecialchars($user['user_icon'], ENT_QUOTES, 'UTF-8'); ?>"></label>
-        <div class="form-actions">
-          <button type="submit">更新</button>
-        </div>
-      </form>
-      <form method="post" onsubmit="return confirm('このユーザを削除しますか？');">
-        <input type="hidden" name="action" value="delete">
-        <input type="hidden" name="id" value="<?php echo (int)$user['id']; ?>">
-        <button type="submit" class="danger">削除</button>
-      </form>
+    <article class="card glass card-with-icon">
+      <?php if (trim((string)$user['user_icon']) !== ''): ?>
+        <img
+          class="entity-preview"
+          src="<?php echo htmlspecialchars($user['user_icon'], ENT_QUOTES, 'UTF-8'); ?>"
+          alt="<?php echo htmlspecialchars($user['user_name'], ENT_QUOTES, 'UTF-8'); ?>"
+          onerror="this.onerror=null;this.src='img/noimage.png';"
+        >
+      <?php endif; ?>
+      <div class="card-main">
+        <h3>#<?php echo (int)$user['id']; ?></h3>
+        <form method="post" class="admin-form inline-form horizontal-form">
+          <input type="hidden" name="action" value="update">
+          <input type="hidden" name="id" value="<?php echo (int)$user['id']; ?>">
+          <label>ユーザ名<input type="text" name="user_name" value="<?php echo htmlspecialchars($user['user_name'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
+          <label>account_id<input type="text" name="account_id" value="<?php echo htmlspecialchars($user['account_id'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
+          <label>アイコンパス<input type="text" name="user_icon" value="<?php echo htmlspecialchars($user['user_icon'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+          <div class="form-actions">
+            <button type="submit">更新</button>
+          </div>
+        </form>
+        <form method="post" onsubmit="return confirm('このユーザを削除しますか？');">
+          <input type="hidden" name="action" value="delete">
+          <input type="hidden" name="id" value="<?php echo (int)$user['id']; ?>">
+          <button type="submit" class="danger">削除</button>
+        </form>
+      </div>
     </article>
   <?php endforeach; ?>
 </section>
