@@ -30,6 +30,10 @@ if (!function_exists('tme')) {
                 <span class="site-brand-mark"></span>
                 <span class="site-brand-text">Webhook Viewer</span>
             </div>
+            <nav class="site-nav">
+                <a href="index.php" class="site-nav-link">一覧</a>
+                <a href="manage.php" class="site-nav-link">追加・管理</a>
+            </nav>
         </div>
     </header>
 

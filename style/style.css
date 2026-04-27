@@ -447,3 +447,115 @@ input {
     color: var(--text-muted);
     font-size: 12px;
 }
+.site-header-inner {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.site-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.site-nav-link {
+    display: inline-flex;
+    align-items: center;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    color: var(--text);
+    font-size: 13px;
+}
+
+.site-nav-link:hover {
+    background: var(--bg-soft);
+}
+
+.tab-nav {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+.tab-link {
+    padding: 8px 14px;
+    border: 1px solid var(--line-strong);
+    border-radius: 8px;
+    font-size: 14px;
+    color: var(--text-muted);
+}
+
+.tab-link.is-active {
+    background: var(--accent-soft);
+    color: var(--text);
+    border-color: rgba(143, 45, 45, 0.35);
+}
+
+.flash-message {
+    margin-top: 16px;
+    border-radius: 10px;
+    padding: 12px 14px;
+    border: 1px solid transparent;
+}
+
+.flash-message.is-success {
+    background: rgba(47, 154, 66, 0.18);
+    border-color: rgba(47, 154, 66, 0.4);
+}
+
+.flash-message.is-error {
+    background: rgba(186, 69, 69, 0.18);
+    border-color: rgba(186, 69, 69, 0.4);
+}
+
+.section-title {
+    margin: 0 0 14px;
+    font-size: 20px;
+}
+
+.crud-form {
+    display: grid;
+    gap: 10px;
+    align-items: center;
+}
+
+.grid-4 {
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.checkbox-inline {
+    display: inline-flex;
+    gap: 8px;
+    align-items: center;
+    min-height: 46px;
+}
+
+.inline-input {
+    width: 100%;
+    min-width: 150px;
+    height: 38px;
+    border-radius: 8px;
+    border: 1px solid var(--line);
+    background: #171719;
+    color: var(--text);
+    padding: 0 10px;
+}
+
+.actions-cell {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.btn-danger {
+    background: #612424;
+    color: #fff;
+}
+
+.btn-danger:hover {
+    background: #7d2f2f;
+}
