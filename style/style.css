@@ -82,9 +82,10 @@ body {
 }
 
 .cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
-  gap: 1rem;
+    display: flex;
+    grid-template-columns: repeat(auto-fit, minmax(270px, 1fr));
+    gap: 1rem;
+    flex-direction: column;
 }
 
 .card {
@@ -319,6 +320,5 @@ code {
   border-radius: 10px;
   background: rgba(255,255,255,.06);
   line-height: 1.6;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
 }

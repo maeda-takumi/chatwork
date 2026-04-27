@@ -39,6 +39,24 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$targetAccountIds = [];
+foreach ($messages as $message) {
+    if (preg_match('/\[to:(\d+)\]/', (string)($message['body'] ?? ''), $matches)) {
+        $targetAccountIds[$matches[1]] = true;
+    }
+}
+
+$targetUsersByAccountId = [];
+if (!empty($targetAccountIds)) {
+    $placeholders = implode(',', array_fill(0, count($targetAccountIds), '?'));
+    $targetStmt = $pdo->prepare("SELECT account_id, user_name, user_icon FROM users WHERE account_id IN ($placeholders)");
+    $targetStmt->execute(array_keys($targetAccountIds));
+
+    foreach ($targetStmt->fetchAll(PDO::FETCH_ASSOC) as $targetUser) {
+        $targetUsersByAccountId[(string)$targetUser['account_id']] = $targetUser;
+    }
+}
+
 include __DIR__ . '/header.php';
 ?>
 
@@ -86,26 +104,54 @@ include __DIR__ . '/header.php';
       $roomName = trim((string)($message['room_name'] ?? ''));
       $roomLabel = $roomName !== '' ? $roomName : ('room_id: ' . (string)$message['room_id']);
       $roomIcon = trim((string)($message['room_icon'] ?? ''));
-      $userName = trim((string)($message['user_name'] ?? ''));
-      $userLabel = $userName !== '' ? $userName : ('account_id: ' . (string)$message['account_id']);
-      $userIcon = trim((string)($message['user_icon'] ?? ''));
+      $senderName = trim((string)($message['user_name'] ?? ''));
+      $senderLabel = $senderName !== '' ? $senderName : ('account_id: ' . (string)$message['account_id']);
+      $senderIcon = trim((string)($message['user_icon'] ?? ''));
+
+      $targetAccountId = '';
+      if (preg_match('/\[to:(\d+)\]/', (string)($message['body'] ?? ''), $matches)) {
+          $targetAccountId = $matches[1];
+      }
+
+      $targetUser = $targetAccountId !== '' ? ($targetUsersByAccountId[$targetAccountId] ?? null) : null;
+      $targetName = trim((string)($targetUser['user_name'] ?? ''));
+      $targetLabel = $targetName !== ''
+          ? $targetName
+          : ($targetAccountId !== '' ? ('account_id: ' . $targetAccountId) : '対象者なし');
+      $targetIcon = trim((string)($targetUser['user_icon'] ?? ''));
+
+      $rawSendTime = trim((string)($message['send_time'] ?? ''));
+      $timestamp = strtotime($rawSendTime);
+      $formattedSendTime = $rawSendTime;
+      if ($timestamp !== false) {
+          $formattedSendTime = date('Y/m/d H:i:s', $timestamp);
+      }
     ?>
     <article class="card glass">
       <div class="card-head">
         <h2>#<?php echo (int)$message['id']; ?></h2>
-        <span class="badge"><?php echo htmlspecialchars((string)$message['send_time'], ENT_QUOTES, 'UTF-8'); ?></span>
+        <span class="badge"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
       </div>
 
       <div class="message-meta-row">
-        <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($userLabel, ENT_QUOTES, 'UTF-8'); ?>">
-          <img src="<?php echo htmlspecialchars($userIcon !== '' ? $userIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($userLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-          <span>account_id: <?php echo htmlspecialchars((string)$message['account_id'], ENT_QUOTES, 'UTF-8'); ?></span>
-        </div>
 
         <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>">
+          <strong>ルーム情報</strong>
           <img src="<?php echo htmlspecialchars($roomIcon !== '' ? $roomIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-          <span>room_id: <?php echo htmlspecialchars((string)$message['room_id'], ENT_QUOTES, 'UTF-8'); ?></span>
+
+          <span><?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?></span>
         </div>
+
+        <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>">
+          <strong>送信者</strong>
+          <img src="<?php echo htmlspecialchars($senderIcon !== '' ? $senderIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+          <span><?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+        </div>
+
+        <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
+          <strong>対象者</strong>
+          <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+          <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>        </div>
       </div>
 
       <div class="message-body"><?php echo nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')); ?></div>
