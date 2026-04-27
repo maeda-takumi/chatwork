@@ -80,52 +80,59 @@ SQL;
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_event_type ON webhook_events(event_type)");
     $pdo->exec(
         'CREATE TABLE IF NOT EXISTS users (
-            account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            chatwork_account_id TEXT,
-            account_id TEXT PRIMARY KEY,
-            account_name TEXT,
-            mention_token TEXT,
-            icon_path TEXT,
-            created_at TEXT NOT NULL,
-            updated_at TEXT NOT NULL
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_name TEXT,
+            user_id TEXT,
+            user_icon TEXT
         )'
     );
-
-    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
-    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
 
     $columns = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
     $columnMap = [];
     foreach ($columns as $column) {
-        $columnMap[(string)$column['name']] = $column;
+        $columnMap[(string)$column['name']] = true;
     }
-    $accountIdType = strtoupper((string)($columnMap['account_id']['type'] ?? ''));
-    $needsMigration = !isset($columnMap['chatwork_account_id'])
-        || !isset($columnMap['icon_path'])
-        || strpos($accountIdType, 'INT') === false;
+    $needsMigration = !isset($columnMap['id'])
+        || !isset($columnMap['user_name'])
+        || !isset($columnMap['user_id'])
+        || !isset($columnMap['user_icon'])
+        || count($columnMap) !== 4;
 
     if ($needsMigration) {
+        $idExpr = isset($columnMap['id'])
+            ? 'id'
+            : (isset($columnMap['account_id']) ? 'account_id' : 'NULL');
+        $userNameExpr = isset($columnMap['user_name'])
+            ? 'user_name'
+            : (isset($columnMap['account_name']) ? 'account_name' : 'NULL');
+        $userIdExpr = isset($columnMap['user_id'])
+            ? 'user_id'
+            : (isset($columnMap['chatwork_account_id']) ? 'chatwork_account_id' : 'NULL');
+        $userIconExpr = isset($columnMap['user_icon'])
+            ? 'user_icon'
+            : (isset($columnMap['icon_path']) ? 'icon_path' : 'NULL');
         $pdo->exec(
             'CREATE TABLE users_new (
-                account_id INTEGER PRIMARY KEY AUTOINCREMENT,
-                chatwork_account_id TEXT,
-                account_name TEXT,
-                mention_token TEXT,
-                icon_path TEXT,
-                created_at TEXT NOT NULL,
-                updated_at TEXT NOT NULL
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_name TEXT,
+                user_id TEXT,
+                user_icon TEXT
             )'
         );
         $pdo->exec(
-            'INSERT INTO users_new (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
-             SELECT account_id, account_name, mention_token, NULL, created_at, updated_at
+            'INSERT INTO users_new (id, user_name, user_id, user_icon)
+             SELECT
+                ' . $idExpr . ',
+                ' . $userNameExpr . ',
+                ' . $userIdExpr . ',
+                ' . $userIconExpr . '
              FROM users'
         );
         $pdo->exec('DROP TABLE users');
         $pdo->exec('ALTER TABLE users_new RENAME TO users');
-        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
-        $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_chatwork_account_id_unique ON users(chatwork_account_id)");
     }
+
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_user_id_unique ON users(user_id)");
 
 
     $pdo->exec(
@@ -288,43 +295,39 @@ try {
 
     if ($fromAccountId !== '') {
         $userStmt = $pdo->prepare(
-            'INSERT INTO users (chatwork_account_id, account_name, mention_token, icon_path, created_at, updated_at)
-             VALUES (:chatwork_account_id, :account_name, :mention_token, :icon_path, :created_at, :updated_at)
-             ON CONFLICT(chatwork_account_id) DO UPDATE SET
-                 account_name = CASE
-                     WHEN excluded.account_name IS NOT NULL AND excluded.account_name <> "" THEN excluded.account_name
-                     ELSE users.account_name
+            'INSERT INTO users (user_name, user_id, user_icon)
+             VALUES (:user_name, :user_id, :user_icon)
+             ON CONFLICT(user_id) DO UPDATE SET
+                 user_name = CASE
+                     WHEN excluded.user_name IS NOT NULL AND excluded.user_name <> "" THEN excluded.user_name
+                     ELSE users.user_name
                  END,
-                 mention_token = excluded.mention_token,
-                 updated_at = excluded.updated_at'
+                 user_icon = excluded.user_icon'
         );
 
         $userStmt->execute([
-            ':chatwork_account_id' => $fromAccountId,
-            ':account_name' => $fromAccountName,
-            ':mention_token' => '[To:' . $fromAccountId . ']',
-            ':icon_path' => 'img/user-' . $fromAccountId . '.png',
-            ':created_at' => $now,
-            ':updated_at' => $now,
+            ':user_name' => $fromAccountName,
+            ':user_id' => $fromAccountId,
+            ':user_icon' => 'img/user-' . $fromAccountId . '.png',
         ]);
     }
 
     $mentionIds = extractMentionAccountIds($body);
     if (!empty($mentionIds)) {
         $mentionStmt = $pdo->prepare(
-            'INSERT INTO users (chatwork_account_id, account_name, mention_token, created_at, updated_at)
-             VALUES (:chatwork_account_id, NULL, :mention_token, :created_at, :updated_at)
-             ON CONFLICT(chatwork_account_id) DO UPDATE SET
-                 mention_token = excluded.mention_token,
-                 updated_at = excluded.updated_at'
+            'INSERT INTO users (user_name, user_id, user_icon)
+             VALUES (NULL, :user_id, :user_icon)
+             ON CONFLICT(user_id) DO UPDATE SET
+                 user_icon = CASE
+                     WHEN users.user_icon IS NULL OR users.user_icon = "" THEN excluded.user_icon
+                     ELSE users.user_icon
+                 END'
         );
 
         foreach ($mentionIds as $accountId) {
             $mentionStmt->execute([
-                ':chatwork_account_id' => $accountId,
-                ':mention_token' => '[To:' . $accountId . ']',
-                ':created_at' => $now,
-                ':updated_at' => $now,
+                ':user_id' => $accountId,
+                ':user_icon' => 'img/user-' . $accountId . '.png',
             ]);
         }
     }

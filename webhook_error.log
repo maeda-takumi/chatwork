@@ -1,4 +1,1 @@
-[2026-04-27 14:07:36] Exception: SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: users.mention_token
-[2026-04-27 14:08:08] Exception: SQLSTATE[23000]: Integrity constraint violation: 19 UNIQUE constraint failed: users.mention_token
-[2026-04-27 14:25:54] Exception: SQLSTATE[HY000]: General error: 1 duplicate column name: account_id
-[2026-04-27 14:34:07] Exception: SQLSTATE[HY000]: General error: 1 no such column: mention_token
+[2026-04-27 14:43:23] Exception: SQLSTATE[HY000]: General error: 1 no such column: is_enabled
