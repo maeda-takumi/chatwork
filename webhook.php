@@ -78,6 +78,30 @@ SQL;
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_room_id ON webhook_events(room_id)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_message_id ON webhook_events(message_id)");
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_event_type ON webhook_events(event_type)");
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS users (
+            account_id TEXT PRIMARY KEY,
+            account_name TEXT,
+            mention_token TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS rooms (
+            room_id TEXT PRIMARY KEY,
+            room_name TEXT,
+            icon_path TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_rooms_enabled ON rooms(is_enabled)");
 }
 
 function payloadGet(array $payload, array $path, $default = null)
@@ -92,6 +116,19 @@ function payloadGet(array $payload, array $path, $default = null)
     return $value;
 }
 
+function extractMentionAccountIds(string $body): array
+{
+    if ($body === '') {
+        return [];
+    }
+
+    preg_match_all('/\[To:(\d+)\]/', $body, $matches);
+    if (empty($matches[1])) {
+        return [];
+    }
+
+    return array_values(array_unique($matches[1]));
+}
 try {
     if (!is_dir($dbDir)) {
         mkdir($dbDir, 0777, true);
@@ -145,6 +182,7 @@ try {
 
     initDatabase($pdo);
 
+    $pdo->beginTransaction();
     $stmt = $pdo->prepare(
         'INSERT OR IGNORE INTO webhook_events (
             received_at,
@@ -173,8 +211,9 @@ try {
         )'
     );
 
+    $now = date('Y-m-d H:i:s');
     $stmt->execute([
-        ':received_at' => date('Y-m-d H:i:s'),
+        ':received_at' => $now,
         ':webhook_setting_id' => $webhookSettingId,
         ':webhook_name' => $webhookName,
         ':event_type' => $eventType,
@@ -187,11 +226,80 @@ try {
         ':raw_json' => $rawBody,
     ]);
 
+    if ($roomId !== '') {
+        $roomStmt = $pdo->prepare(
+            'INSERT INTO rooms (room_id, room_name, icon_path, is_enabled, created_at, updated_at)
+             VALUES (:room_id, :room_name, :icon_path, 1, :created_at, :updated_at)
+             ON CONFLICT(room_id) DO UPDATE SET
+                 room_name = CASE
+                     WHEN excluded.room_name IS NOT NULL AND excluded.room_name <> "" THEN excluded.room_name
+                     ELSE rooms.room_name
+                 END,
+                 icon_path = excluded.icon_path,
+                 updated_at = excluded.updated_at'
+        );
+
+        $roomStmt->execute([
+            ':room_id' => $roomId,
+            ':room_name' => $webhookName,
+            ':icon_path' => 'img/' . $roomId . '.png',
+            ':created_at' => $now,
+            ':updated_at' => $now,
+        ]);
+    }
+
+    if ($fromAccountId !== '') {
+        $userStmt = $pdo->prepare(
+            'INSERT INTO users (account_id, account_name, mention_token, created_at, updated_at)
+             VALUES (:account_id, :account_name, :mention_token, :created_at, :updated_at)
+             ON CONFLICT(account_id) DO UPDATE SET
+                 account_name = CASE
+                     WHEN excluded.account_name IS NOT NULL AND excluded.account_name <> "" THEN excluded.account_name
+                     ELSE users.account_name
+                 END,
+                 mention_token = excluded.mention_token,
+                 updated_at = excluded.updated_at'
+        );
+
+        $userStmt->execute([
+            ':account_id' => $fromAccountId,
+            ':account_name' => $fromAccountName,
+            ':mention_token' => '[To:' . $fromAccountId . ']',
+            ':created_at' => $now,
+            ':updated_at' => $now,
+        ]);
+    }
+
+    $mentionIds = extractMentionAccountIds($body);
+    if (!empty($mentionIds)) {
+        $mentionStmt = $pdo->prepare(
+            'INSERT INTO users (account_id, account_name, mention_token, created_at, updated_at)
+             VALUES (:account_id, NULL, :mention_token, :created_at, :updated_at)
+             ON CONFLICT(account_id) DO UPDATE SET
+                 mention_token = excluded.mention_token,
+                 updated_at = excluded.updated_at'
+        );
+
+        foreach ($mentionIds as $accountId) {
+            $mentionStmt->execute([
+                ':account_id' => $accountId,
+                ':mention_token' => '[To:' . $accountId . ']',
+                ':created_at' => $now,
+                ':updated_at' => $now,
+            ]);
+        }
+    }
+
+    $pdo->commit();
     http_response_code(200);
     header('Content-Type: text/plain; charset=UTF-8');
     echo 'OK';
 
 } catch (Throwable $e) {
+    if (isset($pdo) && $pdo instanceof PDO && $pdo->inTransaction()) {
+        $pdo->rollBack();
+    }
+
     writeLog('Exception: ' . $e->getMessage(), $logPath);
     http_response_code(500);
     echo 'Internal Server Error';

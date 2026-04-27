@@ -14,12 +14,65 @@ function tme(string $path): string
     return file_exists($fullPath) ? (string)filemtime($fullPath) : (string)time();
 }
 
+function initDatabase(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS webhook_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            received_at TEXT NOT NULL,
+            webhook_setting_id TEXT,
+            webhook_name TEXT,
+            event_type TEXT,
+            room_id TEXT,
+            message_id TEXT,
+            from_account_id TEXT,
+            from_account_name TEXT,
+            body TEXT,
+            event_source_key TEXT NOT NULL,
+            raw_json TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_event_source_key_unique ON webhook_events(event_source_key)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_received_at ON webhook_events(received_at)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_webhook_setting_id ON webhook_events(webhook_setting_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_room_id ON webhook_events(room_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_message_id ON webhook_events(message_id)");
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_event_type ON webhook_events(event_type)");
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS users (
+            account_id TEXT PRIMARY KEY,
+            account_name TEXT,
+            mention_token TEXT,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec("CREATE UNIQUE INDEX IF NOT EXISTS idx_users_mention_token_unique ON users(mention_token)");
+
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS rooms (
+            room_id TEXT PRIMARY KEY,
+            room_name TEXT,
+            icon_path TEXT,
+            is_enabled INTEGER NOT NULL DEFAULT 1,
+            created_at TEXT NOT NULL,
+            updated_at TEXT NOT NULL
+        )'
+    );
+
+    $pdo->exec("CREATE INDEX IF NOT EXISTS idx_rooms_enabled ON rooms(is_enabled)");
+}
 $search = trim((string)($_GET['search'] ?? ''));
+$selectedRoomId = trim((string)($_GET['room_id'] ?? ''));
 $page   = max(1, (int)($_GET['page'] ?? 1));
 $limit  = 25;
 $offset = ($page - 1) * $limit;
 
 $rows = [];
+$rooms = [];
 $total = 0;
 $totalPages = 1;
 $dbAvailable = false;
@@ -32,12 +85,23 @@ if (file_exists($dbPath)) {
         ]);
 
         $dbAvailable = true;
+        initDatabase($pdo);
+
+        $roomsStmt = $pdo->query(
+            'SELECT room_id, room_name, icon_path
+             FROM rooms
+             WHERE is_enabled = 1
+             ORDER BY COALESCE(NULLIF(room_name, ""), room_id) ASC'
+        );
+        $rooms = $roomsStmt->fetchAll();
+
+        $whereParts = [];
 
         $where = '';
         $params = [];
 
         if ($search !== '') {
-            $where = "WHERE 
+            $whereParts[] = '(
                 event_type LIKE :search
                 OR room_id LIKE :search
                 OR message_id LIKE :search
@@ -45,8 +109,18 @@ if (file_exists($dbPath)) {
                 OR from_account_name LIKE :search
                 OR body LIKE :search
                 OR raw_json LIKE :search
-            ";
+            )';
             $params[':search'] = '%' . $search . '%';
+        }
+
+        if ($selectedRoomId !== '') {
+            $whereParts[] = 'room_id = :room_id';
+            $params[':room_id'] = $selectedRoomId;
+        }
+
+        $where = '';
+        if (!empty($whereParts)) {
+            $where = 'WHERE ' . implode(' AND ', $whereParts);
         }
 
         $countSql = "SELECT COUNT(*) FROM webhook_events {$where}";
@@ -64,7 +138,7 @@ if (file_exists($dbPath)) {
         }
 
         $listSql = "
-            SELECT 
+            SELECT
                 id,
                 received_at,
                 event_type,
@@ -90,6 +164,7 @@ if (file_exists($dbPath)) {
 
     } catch (Throwable $e) {
         $dbAvailable = false;
+        $rooms = [];
         $rows = [];
         $total = 0;
         $totalPages = 1;
@@ -101,6 +176,9 @@ if ($search !== '') {
     $queryBase['search'] = $search;
 }
 
+if ($selectedRoomId !== '') {
+    $queryBase['room_id'] = $selectedRoomId;
+}
 include __DIR__ . '/header.php';
 ?>
 
@@ -117,6 +195,9 @@ include __DIR__ . '/header.php';
     </div>
 
     <form method="get" action="index.php" class="search-form">
+        <?php if ($selectedRoomId !== ''): ?>
+            <input type="hidden" name="room_id" value="<?php echo h($selectedRoomId); ?>">
+        <?php endif; ?>
         <div class="search-group">
             <input
                 type="text"
@@ -126,11 +207,55 @@ include __DIR__ . '/header.php';
                 placeholder="送信者名、本文、ルームID、イベント種別などで検索"
             >
             <button type="submit" class="btn btn-primary">検索</button>
-            <?php if ($search !== ''): ?>
+            <?php if ($search !== '' || $selectedRoomId !== ''): ?>
                 <a href="index.php" class="btn btn-secondary">クリア</a>
             <?php endif; ?>
         </div>
     </form>
+    <?php if ($dbAvailable && !empty($rooms)): ?>
+        <div class="room-filter-wrap">
+            <div class="room-filter-label">ルーム選択</div>
+            <div class="room-filter-list">
+                <?php $allRoomsQuery = http_build_query($search !== '' ? ['search' => $search] : []); ?>
+                <a
+                    href="index.php<?php echo $allRoomsQuery !== '' ? '?' . h($allRoomsQuery) : ''; ?>"
+                    class="room-filter-btn <?php echo $selectedRoomId === '' ? 'is-active' : ''; ?>"
+                    title="すべてのルーム"
+                    aria-label="すべてのルーム"
+                >
+                    <span class="room-filter-all">ALL</span>
+                </a>
+
+                <?php foreach ($rooms as $room): ?>
+                    <?php
+                    $roomId = (string)$room['room_id'];
+                    $roomName = (string)($room['room_name'] ?? '');
+                    $iconPath = (string)($room['icon_path'] ?? ('img/' . $roomId . '.png'));
+                    $iconFile = __DIR__ . '/' . ltrim($iconPath, '/');
+                    $iconUrl = file_exists($iconFile) ? $iconPath : '';
+                    $query = ['room_id' => $roomId];
+                    if ($search !== '') {
+                        $query['search'] = $search;
+                    }
+                    $roomQuery = http_build_query($query);
+                    $buttonLabel = $roomName !== '' ? $roomName : ('ルームID: ' . $roomId);
+                    ?>
+                    <a
+                        href="index.php?<?php echo h($roomQuery); ?>"
+                        class="room-filter-btn <?php echo $selectedRoomId === $roomId ? 'is-active' : ''; ?>"
+                        title="<?php echo h($buttonLabel); ?>"
+                        aria-label="<?php echo h($buttonLabel); ?>"
+                    >
+                        <?php if ($iconUrl !== ''): ?>
+                            <img src="<?php echo h($iconUrl); ?>" alt="<?php echo h($buttonLabel); ?>" class="room-filter-icon">
+                        <?php else: ?>
+                            <span class="room-filter-fallback"><?php echo h(substr($roomId, -2)); ?></span>
+                        <?php endif; ?>
+                    </a>
+                <?php endforeach; ?>
+            </div>
+        </div>
+    <?php endif; ?>
 </section>
 
 <section class="panel">
@@ -139,6 +264,10 @@ include __DIR__ . '/header.php';
         <div>
             <?php if (!$dbAvailable): ?>
                 DBファイル未作成
+            <?php elseif ($selectedRoomId !== '' && $search !== ''): ?>
+                ルームID「<?php echo h($selectedRoomId); ?>」かつ「<?php echo h($search); ?>」の検索結果
+            <?php elseif ($selectedRoomId !== ''): ?>
+                ルームID「<?php echo h($selectedRoomId); ?>」のメッセージ一覧
             <?php elseif ($search !== ''): ?>
                 「<?php echo h($search); ?>」の検索結果
             <?php else: ?>
