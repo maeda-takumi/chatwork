@@ -140,9 +140,13 @@ function verifyRequest(array $headers, array $queryParams, string $rawBody, stri
 {
     $signatureCandidate = findSignatureCandidate($headers, $queryParams);
     if ($signatureCandidate !== null && $signatureCandidate !== '') {
-        $expectedSignature = base64_encode(hash_hmac('sha256', $rawBody, $token, true));
-        
-        return hash_equals($expectedSignature, $signatureCandidate);
+        foreach (buildExpectedSignatures($rawBody, $token) as $expectedSignature) {
+            if (hash_equals($expectedSignature, $signatureCandidate)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     $tokenHeader = $headers['x-chatworktoken'] ?? ($headers['x-chatwork-webhook-token'] ?? null);
@@ -151,6 +155,22 @@ function verifyRequest(array $headers, array $queryParams, string $rawBody, stri
     }
 
     return false;
+}
+
+function buildExpectedSignatures(string $rawBody, string $token): array
+{
+    $keys = [$token];
+    $decodedToken = base64_decode($token, true);
+    if (is_string($decodedToken) && $decodedToken !== '') {
+        $keys[] = $decodedToken;
+    }
+
+    $signatures = [];
+    foreach ($keys as $key) {
+        $signatures[] = base64_encode(hash_hmac('sha256', $rawBody, $key, true));
+    }
+
+    return array_values(array_unique($signatures));
 }
 
 function findSignatureCandidate(array $headers, array $queryParams): ?string
