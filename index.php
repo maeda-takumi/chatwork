@@ -132,19 +132,19 @@ if (file_exists($dbPath)) {
 
         if ($search !== '') {
             $whereParts[] = '(
-                event_type LIKE :search
-                OR room_id LIKE :search
-                OR message_id LIKE :search
-                OR from_account_id LIKE :search
-                OR from_account_name LIKE :search
-                OR body LIKE :search
-                OR raw_json LIKE :search
+                webhook_events.event_type LIKE :search
+                OR webhook_events.room_id LIKE :search
+                OR webhook_events.message_id LIKE :search
+                OR webhook_events.from_account_id LIKE :search
+                OR webhook_events.from_account_name LIKE :search
+                OR webhook_events.body LIKE :search
+                OR webhook_events.raw_json LIKE :search
             )';
             $params[':search'] = '%' . $search . '%';
         }
 
         if ($selectedRoomId !== '') {
-            $whereParts[] = 'room_id = :room_id';
+            $whereParts[] = 'webhook_events.room_id = :room_id';
             $params[':room_id'] = $selectedRoomId;
         }
 
