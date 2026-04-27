@@ -44,17 +44,18 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-function parse_target_from_body(string $body): array
+function parse_targets_from_body(string $body): array
 {
     if (preg_match('/\[toall\]/i', $body) === 1) {
-        return ['type' => 'all', 'account_id' => ''];
+        return ['type' => 'all', 'account_ids' => []];
     }
 
-    if (preg_match('/\[to:\s*([^\]\s]+)\]/i', $body, $matches) === 1) {
-        return ['type' => 'user', 'account_id' => trim((string)$matches[1])];
+    if (preg_match_all('/\[to:\s*([^\]\s]+)\]/i', $body, $matches) > 0) {
+        $accountIds = array_values(array_unique(array_filter(array_map(static fn(string $value): string => trim($value), $matches[1] ?? []), static fn(string $value): bool => $value !== '')));
+        return ['type' => 'user', 'account_ids' => $accountIds];
     }
 
-    return ['type' => 'none', 'account_id' => ''];
+    return ['type' => 'none', 'account_ids' => []];
 }
 
 
@@ -64,21 +65,21 @@ foreach ($users as $user) {
 }
 
 foreach ($messages as $index => $message) {
-    $target = parse_target_from_body((string)($message['body'] ?? ''));
+    $target = parse_targets_from_body((string)($message['body'] ?? ''));
     $messages[$index]['target_type'] = $target['type'];
-    $messages[$index]['target_account_id'] = $target['account_id'];
+    $messages[$index]['target_account_ids'] = $target['account_ids'];
 }
 
 if ($selectedTarget !== '') {
     $messages = array_values(array_filter($messages, static function (array $message) use ($selectedTarget): bool {
         $targetType = (string)($message['target_type'] ?? 'none');
-        $targetAccountId = (string)($message['target_account_id'] ?? '');
+        $targetAccountIds = $message['target_account_ids'] ?? [];
 
         if ($selectedTarget === '__all__') {
             return $targetType === 'all';
         }
 
-        return $targetType === 'user' && $targetAccountId === $selectedTarget;
+        return $targetType === 'user' && is_array($targetAccountIds) && in_array($selectedTarget, $targetAccountIds, true);
     }));
 }
 
@@ -92,10 +93,10 @@ $messages = array_slice($messages, $offset, $perPage);
 
 $selectedTargetUser = $selectedTarget !== '' ? ($targetUsersByAccountId[$selectedTarget] ?? null) : null;
 $selectedTargetLabel = '対象者を選択';
-$selectedTargetIcon = 'img/noimage.png';
+$selectedTargetIcon = 'img/all.png';
 if ($selectedTarget === '__all__') {
     $selectedTargetLabel = '全員 ([toall])';
-    $selectedTargetIcon = 'img/complete.png';
+    $selectedTargetIcon = 'img/all.png';
 } elseif (is_array($selectedTargetUser)) {
     $selectedTargetLabel = trim((string)$selectedTargetUser['user_name']) ?: ('account_id: ' . $selectedTarget);
     $selectedTargetIcon = trim((string)$selectedTargetUser['user_icon']) ?: 'img/noimage.png';
@@ -140,11 +141,11 @@ include __DIR__ . '/header.php';
         </button>
         <div class="target-dropdown-menu" data-target-menu>
           <button type="button" class="target-option" data-value="">
-            <img src="img/noimage.png" alt="対象指定なし">
+            <img src="img/all.png" alt="対象指定なし">
             <span>対象指定なし</span>
           </button>
           <button type="button" class="target-option" data-value="__all__">
-            <!-- <img src="img/complete.png" alt="全員"> -->
+            <img src="img/all.png" alt="全員">
             <span>全員 ([toall])</span>
           </button>
           <?php foreach ($users as $user): ?>
@@ -203,18 +204,32 @@ include __DIR__ . '/header.php';
       $senderIcon = trim((string)($message['user_icon'] ?? ''));
 
       $targetType = (string)($message['target_type'] ?? 'none');
-      $targetAccountId = (string)($message['target_account_id'] ?? '');
-
-      $targetUser = $targetAccountId !== '' ? ($targetUsersByAccountId[$targetAccountId] ?? null) : null;
+      $targetAccountIds = is_array($message['target_account_ids'] ?? null) ? $message['target_account_ids'] : [];
+      $targetUsers = [];
+      foreach ($targetAccountIds as $targetAccountId) {
+          $targetUsers[] = $targetUsersByAccountId[(string)$targetAccountId] ?? ['account_id' => (string)$targetAccountId];
+      }
       if ($targetType === 'all') {
           $targetLabel = '全員';
-          $targetIcon = 'img/complete.png';
+          $targetIcon = 'img/all.png';
       } else {
-          $targetName = trim((string)($targetUser['user_name'] ?? ''));
-          $targetLabel = $targetName !== ''
-              ? $targetName
-              : ($targetAccountId !== '' ? ('account_id: ' . $targetAccountId) : '対象者なし');
-          $targetIcon = trim((string)($targetUser['user_icon'] ?? ''));
+          $targetLabels = [];
+          foreach ($targetUsers as $targetUser) {
+              $targetName = trim((string)($targetUser['user_name'] ?? ''));
+              $targetAccountId = trim((string)($targetUser['account_id'] ?? ''));
+              if ($targetName !== '') {
+                  $targetLabels[] = $targetName;
+              } elseif ($targetAccountId !== '') {
+                  $targetLabels[] = 'account_id: ' . $targetAccountId;
+              }
+          }
+          $targetLabel = $targetLabels !== [] ? implode(', ', $targetLabels) : '対象者なし';
+
+          if (count($targetUsers) === 1) {
+              $targetIcon = trim((string)($targetUsers[0]['user_icon'] ?? ''));
+          } else {
+              $targetIcon = 'img/all.png';
+          }
       }
 
 
@@ -253,7 +268,7 @@ include __DIR__ . '/header.php';
 
         <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
           <strong>対象者</strong>
-          <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+          <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/all.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/all.png';">
 
           <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
         </div>

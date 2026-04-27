@@ -27,7 +27,7 @@ window.addEventListener('DOMContentLoaded', () => {
       option.addEventListener('click', () => {
         if (!input) return;
         input.value = option.dataset.value ?? '';
-        const img = option.querySelector('img')?.getAttribute('src') ?? 'img/noimage.png';
+        const img = option.querySelector('img')?.getAttribute('src') ?? 'img/all.png';
         const label = option.querySelector('span')?.textContent ?? '対象者を選択';
         const currentImg = toggle?.querySelector('img');
         const currentLabel = toggle?.querySelector('span');
