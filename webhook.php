@@ -111,9 +111,22 @@ function createTableIfNotExists(PDO $pdo): void
             room_id INTEGER,
             account_id TEXT,
             body TEXT NOT NULL,
-            send_time TEXT
+            send_time TEXT,
+            task INTEGER NOT NULL DEFAULT 0
         )'
     );
+    $columns = $pdo->query('PRAGMA table_info(message)')->fetchAll(PDO::FETCH_ASSOC);
+    $hasTaskColumn = false;
+    foreach ($columns as $column) {
+        if ((string)($column['name'] ?? '') === 'task') {
+            $hasTaskColumn = true;
+            break;
+        }
+    }
+    if (!$hasTaskColumn) {
+        $pdo->exec('ALTER TABLE message ADD COLUMN task INTEGER NOT NULL DEFAULT 0');
+    }
+
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_room_id ON message (room_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_send_time ON message (send_time)');

@@ -322,3 +322,133 @@ code {
   line-height: 1.6;
   overflow-wrap: anywhere;
 }
+.target-dropdown {
+  position: relative;
+}
+
+.target-dropdown-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  justify-content: flex-start;
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.2);
+}
+
+.target-dropdown-toggle img,
+.target-option img {
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  object-fit: cover;
+}
+
+.target-dropdown-menu {
+  position: absolute;
+  width: 100%;
+  max-height: 260px;
+  overflow-y: auto;
+  top: calc(100% + 6px);
+  left: 0;
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 10px;
+  background: rgba(8, 12, 26, .98);
+  padding: .35rem;
+  display: none;
+  z-index: 12;
+}
+
+.target-dropdown.is-open .target-dropdown-menu {
+  display: block;
+}
+
+.target-option {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: .45rem;
+  padding: .45rem;
+  border-radius: 8px;
+  background: transparent;
+}
+
+.target-option:hover {
+  background: rgba(255,255,255,.08);
+}
+
+.message-card {
+  position: relative;
+  overflow: hidden;
+}
+
+.message-card.is-complete {
+  background: rgba(4, 6, 16, .85);
+  border-color: rgba(255,255,255,.1);
+}
+
+.message-card.is-complete > *:not(.complete-stamp) {
+  opacity: .45;
+}
+
+.complete-stamp {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  width: 84px;
+  height: 84px;
+  object-fit: contain;
+  z-index: 3;
+  opacity: 0;
+  transform: scale(.6) rotate(-15deg);
+  pointer-events: none;
+}
+
+.message-card.is-complete .complete-stamp {
+  opacity: 1;
+  transform: scale(1) rotate(-10deg);
+}
+
+.message-card.stamp-animate .complete-stamp {
+  animation: stampIn .65s ease;
+}
+
+@keyframes stampIn {
+  0% { opacity: 0; transform: scale(1.8) rotate(-18deg); }
+  45% { opacity: 1; transform: scale(.82) rotate(-8deg); }
+  100% { opacity: 1; transform: scale(1) rotate(-10deg); }
+}
+
+.card-actions {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+}
+
+.task-toggle {
+  padding: .35rem .7rem;
+  font-size: .78rem;
+}
+
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .4rem;
+  margin-top: 1rem;
+}
+
+.pager-link {
+  min-width: 34px;
+  text-align: center;
+  text-decoration: none;
+  color: var(--text);
+  border: 1px solid rgba(255,255,255,.25);
+  border-radius: 8px;
+  padding: .35rem .45rem;
+  background: rgba(255,255,255,.04);
+}
+
+.pager-link.active {
+  border-color: rgba(139, 92, 246, .95);
+  background: rgba(139, 92, 246, .22);
+}
