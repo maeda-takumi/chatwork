@@ -39,10 +39,23 @@ $stmt = $pdo->prepare($sql);
 $stmt->execute($params);
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+/**
+ * メッセージ本文から [to:account_id] を抽出する。
+ * Chatworkの表記ゆれ（[To:...] など）にも対応する。
+ */
+function extract_target_account_id(string $body): string
+{
+    if (preg_match('/\[to:\s*([^\]\s]+)\]/i', $body, $matches)) {
+        return (string)$matches[1];
+    }
+
+    return '';
+}
 $targetAccountIds = [];
 foreach ($messages as $message) {
-    if (preg_match('/\[to:(\d+)\]/', (string)($message['body'] ?? ''), $matches)) {
-        $targetAccountIds[$matches[1]] = true;
+    $targetAccountId = extract_target_account_id((string)($message['body'] ?? ''));
+    if ($targetAccountId !== '') {
+        $targetAccountIds[$targetAccountId] = true;
     }
 }
 
@@ -108,10 +121,7 @@ include __DIR__ . '/header.php';
       $senderLabel = $senderName !== '' ? $senderName : ('account_id: ' . (string)$message['account_id']);
       $senderIcon = trim((string)($message['user_icon'] ?? ''));
 
-      $targetAccountId = '';
-      if (preg_match('/\[to:(\d+)\]/', (string)($message['body'] ?? ''), $matches)) {
-          $targetAccountId = $matches[1];
-      }
+      $targetAccountId = extract_target_account_id((string)($message['body'] ?? ''));
 
       $targetUser = $targetAccountId !== '' ? ($targetUsersByAccountId[$targetAccountId] ?? null) : null;
       $targetName = trim((string)($targetUser['user_name'] ?? ''));
