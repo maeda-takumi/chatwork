@@ -40,6 +40,10 @@ if ($selectedRoomId !== '') {
 }
 $sql .= ' ORDER BY COALESCE(m.send_time, "") DESC, m.id DESC';
 
+$stmt = $pdo->prepare($sql);
+$stmt->execute($params);
+$messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
 function parse_target_from_body(string $body): array
 {
     if (preg_match('/\[toall\]/i', $body) === 1) {
@@ -140,7 +144,7 @@ include __DIR__ . '/header.php';
             <span>対象指定なし</span>
           </button>
           <button type="button" class="target-option" data-value="__all__">
-            <img src="img/complete.png" alt="全員">
+            <!-- <img src="img/complete.png" alt="全員"> -->
             <span>全員 ([toall])</span>
           </button>
           <?php foreach ($users as $user): ?>
