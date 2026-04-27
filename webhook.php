@@ -6,13 +6,14 @@ declare(strict_types=1);
  *
  * - Loads webhook settings from config.webhooks.php
  * - Validates incoming request by webhook signature/token
- * - Persists webhook payload into SQLite DB file (webhooks.sqlite)
+ * - Persists webhook payload into SQLite DB file (data/webhooks.sqlite)
  */
 
 header('Content-Type: application/json; charset=UTF-8');
 
 const CONFIG_FILE = __DIR__ . '/config.webhooks.php';
-const SQLITE_FILE = __DIR__ . '/webhooks.sqlite';
+const DATA_DIR = __DIR__ . '/data';
+const SQLITE_FILE = DATA_DIR . '/webhooks.sqlite';
 const ERROR_LOG_FILE = __DIR__ . '/webhook_error.log';
 
 try {
@@ -56,6 +57,8 @@ try {
         respondError(401, 'signature_or_token_mismatch', ['webhook_setting_id' => $webhookSettingId]);
     }
 
+    ensureDataDirectoryExists();
+
     $pdo = new PDO('sqlite:' . SQLITE_FILE, null, null, [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
@@ -63,49 +66,33 @@ try {
 
     createTableIfNotExists($pdo);
 
-    $eventType = findEventType($payload);
-    $roomId = (string)($setting['room_id'] ?? '');
-    $remoteAddr = (string)($_SERVER['REMOTE_ADDR'] ?? '');
-
+    $messageData = formatMessageData($payload, $setting);
     $stmt = $pdo->prepare(
-        'INSERT INTO webhooks (
-            received_at,
-            webhook_setting_id,
+        'INSERT INTO message (
             room_id,
-            event_type,
-            payload,
-            headers,
-            remote_addr,
-            verified
+            account_id,
+            body,
+            send_time
         ) VALUES (
-            :received_at,
-            :webhook_setting_id,
             :room_id,
-            :event_type,
-            :payload,
-            :headers,
-            :remote_addr,
-            :verified
+            :account_id,
+            :body,
+            :send_time
         )'
     );
 
     $stmt->execute([
-        ':received_at' => gmdate('c'),
-        ':webhook_setting_id' => $webhookSettingId,
-        ':room_id' => $roomId,
-        ':event_type' => $eventType,
-        ':payload' => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        ':headers' => json_encode($headers, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-        ':remote_addr' => $remoteAddr,
-        ':verified' => 1,
+        ':room_id' => $messageData['room_id'],
+        ':account_id' => $messageData['account_id'],
+        ':body' => $messageData['body'],
+        ':send_time' => $messageData['send_time'],
     ]);
 
     respond(200, [
         'ok' => true,
         'saved_id' => (int)$pdo->lastInsertId(),
         'webhook_setting_id' => $webhookSettingId,
-        'room_id' => $roomId,
-        'event_type' => $eventType,
+        'room_id' => $messageData['room_id'],
     ]);
 } catch (Throwable $e) {
     logError('internal_server_error', ['exception' => $e->getMessage()]);
@@ -119,21 +106,117 @@ try {
 function createTableIfNotExists(PDO $pdo): void
 {
     $pdo->exec(
-        'CREATE TABLE IF NOT EXISTS webhooks (
+        'CREATE TABLE IF NOT EXISTS message (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            received_at TEXT NOT NULL,
-            webhook_setting_id TEXT NOT NULL,
-            room_id TEXT,
-            event_type TEXT,
-            payload TEXT NOT NULL,
-            headers TEXT,
-            remote_addr TEXT,
-            verified INTEGER NOT NULL DEFAULT 0
+            room_id INTEGER,
+            account_id TEXT,
+            body TEXT NOT NULL,
+            send_time TEXT
         )'
     );
 
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_webhooks_setting_id ON webhooks (webhook_setting_id)');
-    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_webhooks_received_at ON webhooks (received_at)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_room_id ON message (room_id)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_send_time ON message (send_time)');
+}
+
+function ensureDataDirectoryExists(): void
+{
+    if (is_dir(DATA_DIR)) {
+        return;
+    }
+
+    if (!mkdir(DATA_DIR, 0775, true) && !is_dir(DATA_DIR)) {
+        throw new RuntimeException('failed_to_create_data_directory');
+    }
+}
+
+function formatMessageData(array $payload, array $setting): array
+{
+    $event = $payload['webhook_event'] ?? [];
+    if (!is_array($event)) {
+        $event = [];
+    }
+
+    $roomId = findFirstInt([
+        $event['room_id'] ?? null,
+        $event['room']['room_id'] ?? null,
+        $event['source']['room_id'] ?? null,
+        $payload['room_id'] ?? null,
+        $setting['room_id'] ?? null,
+    ]);
+
+    $accountId = findFirstString([
+        $event['from_account_id'] ?? null,
+        $event['from_account']['account_id'] ?? null,
+        $event['account_id'] ?? null,
+        $event['sender']['account_id'] ?? null,
+        $payload['account_id'] ?? null,
+    ]);
+
+    $body = findFirstString([
+        $event['body'] ?? null,
+        $event['message'] ?? null,
+        $payload['body'] ?? null,
+        $payload['message'] ?? null,
+    ]) ?? '';
+
+    $sendTime = normalizeSendTime(findFirstString([
+        $event['send_time'] ?? null,
+        $event['message_time'] ?? null,
+        $payload['send_time'] ?? null,
+    ]));
+
+    return [
+        'room_id' => $roomId,
+        'account_id' => $accountId,
+        'body' => $body,
+        'send_time' => $sendTime,
+    ];
+}
+
+function findFirstInt(array $candidates): ?int
+{
+    foreach ($candidates as $candidate) {
+        if (is_int($candidate)) {
+            return $candidate;
+        }
+
+        if (is_string($candidate) && preg_match('/^\d+$/', $candidate) === 1) {
+            return (int)$candidate;
+        }
+    }
+
+    return null;
+}
+
+function findFirstString(array $candidates): ?string
+{
+    foreach ($candidates as $candidate) {
+        if (is_scalar($candidate) && trim((string)$candidate) !== '') {
+            return (string)$candidate;
+        }
+    }
+
+    return null;
+}
+
+function normalizeSendTime(?string $sendTime): ?string
+{
+    if ($sendTime === null || trim($sendTime) === '') {
+        return gmdate('c');
+    }
+
+    $trimmed = trim($sendTime);
+    if (preg_match('/^\d+$/', $trimmed) === 1) {
+        return gmdate('c', (int)$trimmed);
+    }
+
+    $timestamp = strtotime($trimmed);
+    if ($timestamp === false) {
+        return gmdate('c');
+    }
+
+    return gmdate('c', $timestamp);
 }
 
 function verifyRequest(array $headers, array $queryParams, string $rawBody, string $token): bool
