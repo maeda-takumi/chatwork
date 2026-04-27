@@ -36,23 +36,43 @@ function get_db(): PDO
             account_id TEXT,
             body TEXT NOT NULL,
             send_time TEXT,
-            task INTEGER NOT NULL DEFAULT 0
+            task INTEGER NOT NULL DEFAULT 0,
+            message_id TEXT
         )'
     );
 
-    ensure_task_column($pdo);
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS app_settings (
+            setting_key TEXT PRIMARY KEY,
+            setting_value TEXT NOT NULL
+        )'
+    );
+
+    ensure_message_columns($pdo);
     
     return $pdo;
 }
 
-function ensure_task_column(PDO $pdo): void
+function ensure_message_columns(PDO $pdo): void
 {
     $columns = $pdo->query('PRAGMA table_info(message)')->fetchAll(PDO::FETCH_ASSOC);
+    $hasTask = false;
+    $hasMessageId = false;
     foreach ($columns as $column) {
-        if ((string)($column['name'] ?? '') === 'task') {
-            return;
+        $name = (string)($column['name'] ?? '');
+        if ($name === 'task') {
+            $hasTask = true;
+        }
+        if ($name === 'message_id') {
+            $hasMessageId = true;
         }
     }
 
-    $pdo->exec('ALTER TABLE message ADD COLUMN task INTEGER NOT NULL DEFAULT 0');
+    if (!$hasTask) {
+        $pdo->exec('ALTER TABLE message ADD COLUMN task INTEGER NOT NULL DEFAULT 0');
+    }
+
+    if (!$hasMessageId) {
+        $pdo->exec('ALTER TABLE message ADD COLUMN message_id TEXT');
+    }
 }

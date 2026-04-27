@@ -72,12 +72,15 @@ try {
             room_id,
             account_id,
             body,
+            send_time,
+            message_id
             send_time
         ) VALUES (
             :room_id,
             :account_id,
             :body,
-            :send_time
+            :send_time,
+            :message_id
         )'
     );
 
@@ -86,6 +89,7 @@ try {
         ':account_id' => $messageData['account_id'],
         ':body' => $messageData['body'],
         ':send_time' => $messageData['send_time'],
+        ':message_id' => $messageData['message_id'],
     ]);
 
     respond(200, [
@@ -112,19 +116,27 @@ function createTableIfNotExists(PDO $pdo): void
             account_id TEXT,
             body TEXT NOT NULL,
             send_time TEXT,
-            task INTEGER NOT NULL DEFAULT 0
+            task INTEGER NOT NULL DEFAULT 0,
+            message_id TEXT
         )'
     );
     $columns = $pdo->query('PRAGMA table_info(message)')->fetchAll(PDO::FETCH_ASSOC);
     $hasTaskColumn = false;
+    $hasMessageIdColumn = false;
     foreach ($columns as $column) {
-        if ((string)($column['name'] ?? '') === 'task') {
+        $name = (string)($column['name'] ?? '');
+        if ($name === 'task') {
             $hasTaskColumn = true;
-            break;
+        }
+        if ($name === 'message_id') {
+            $hasMessageIdColumn = true;
         }
     }
     if (!$hasTaskColumn) {
         $pdo->exec('ALTER TABLE message ADD COLUMN task INTEGER NOT NULL DEFAULT 0');
+    }
+    if (!$hasMessageIdColumn) {
+        $pdo->exec('ALTER TABLE message ADD COLUMN message_id TEXT');
     }
 
 
@@ -179,11 +191,17 @@ function formatMessageData(array $payload, array $setting): array
         $payload['send_time'] ?? null,
     ]));
 
+    $messageId = findFirstString([
+        $event['message_id'] ?? null,
+        $event['message']['message_id'] ?? null,
+        $payload['message_id'] ?? null,
+    ]);
     return [
         'room_id' => $roomId,
         'account_id' => $accountId,
         'body' => $body,
         'send_time' => $sendTime,
+        'message_id' => $messageId,
     ];
 }
 
