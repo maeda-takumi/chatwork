@@ -65,22 +65,6 @@ function initDatabase(PDO $pdo): void
 
     $pdo->exec("CREATE INDEX IF NOT EXISTS idx_rooms_enabled ON rooms(is_enabled)");
 }
-/**
- * @return string[]
- */
-function extractToAccountIds(string $body): array
-{
-    if ($body === '') {
-        return [];
-    }
-
-    preg_match_all('/\[to:(\d+)\]/i', $body, $matches);
-    if (empty($matches[1])) {
-        return [];
-    }
-
-    return array_values(array_unique(array_map('strval', $matches[1])));
-}
 $search = trim((string)($_GET['search'] ?? ''));
 $selectedRoomId = trim((string)($_GET['room_id'] ?? ''));
 $page   = max(1, (int)($_GET['page'] ?? 1));
@@ -89,7 +73,6 @@ $offset = ($page - 1) * $limit;
 
 $rows = [];
 $rooms = [];
-$usersByAccountId = [];
 $total = 0;
 $totalPages = 1;
 $dbAvailable = false;
@@ -112,19 +95,6 @@ if (file_exists($dbPath)) {
         );
         $rooms = $roomsStmt->fetchAll();
 
-        $usersStmt = $pdo->query(
-            'SELECT account_id, account_name
-             FROM users
-             ORDER BY account_name ASC, account_id ASC'
-        );
-        foreach ($usersStmt->fetchAll() as $user) {
-            $accountId = (string)($user['account_id'] ?? '');
-            if ($accountId === '') {
-                continue;
-            }
-            $usersByAccountId[$accountId] = (string)($user['account_name'] ?? '');
-        }
-
         $whereParts = [];
 
         $where = '';
@@ -132,19 +102,19 @@ if (file_exists($dbPath)) {
 
         if ($search !== '') {
             $whereParts[] = '(
-                webhook_events.event_type LIKE :search
-                OR webhook_events.room_id LIKE :search
-                OR webhook_events.message_id LIKE :search
-                OR webhook_events.from_account_id LIKE :search
-                OR webhook_events.from_account_name LIKE :search
-                OR webhook_events.body LIKE :search
-                OR webhook_events.raw_json LIKE :search
+                event_type LIKE :search
+                OR room_id LIKE :search
+                OR message_id LIKE :search
+                OR from_account_id LIKE :search
+                OR from_account_name LIKE :search
+                OR body LIKE :search
+                OR raw_json LIKE :search
             )';
             $params[':search'] = '%' . $search . '%';
         }
 
         if ($selectedRoomId !== '') {
-            $whereParts[] = 'webhook_events.room_id = :room_id';
+            $whereParts[] = 'room_id = :room_id';
             $params[':room_id'] = $selectedRoomId;
         }
 
@@ -171,13 +141,15 @@ if (file_exists($dbPath)) {
             SELECT
                 id,
                 received_at,
+                event_type,
                 room_id,
-                COALESCE(NULLIF(rooms.room_name, ''), webhook_events.room_id) AS room_name,
+                message_id,
+                from_account_id,
+                from_account_name,
                 body
             FROM webhook_events
-            LEFT JOIN rooms ON rooms.room_id = webhook_events.room_id
             {$where}
-            ORDER BY webhook_events.id DESC
+            ORDER BY id DESC
             LIMIT :limit OFFSET :offset
         ";
 
@@ -192,7 +164,6 @@ if (file_exists($dbPath)) {
 
     } catch (Throwable $e) {
         $dbAvailable = false;
-        $usersByAccountId = [];
         $rooms = [];
         $rows = [];
         $total = 0;
@@ -272,7 +243,6 @@ include __DIR__ . '/header.php';
                     <a
                         href="index.php?<?php echo h($roomQuery); ?>"
                         class="room-filter-btn <?php echo $selectedRoomId === $roomId ? 'is-active' : ''; ?>"
-                        data-tooltip="<?php echo h($buttonLabel); ?>"
                         title="<?php echo h($buttonLabel); ?>"
                         aria-label="<?php echo h($buttonLabel); ?>"
                     >
@@ -322,47 +292,30 @@ include __DIR__ . '/header.php';
                     <tr>
                         <th>ID</th>
                         <th>受信日時</th>
-                        <th>ルーム名</th>
-                        <th>宛先</th>
+                        <th>イベント</th>
+                        <th>ルームID</th>
+                        <th>送信者</th>
                         <th>本文</th>
                     </tr>
                 </thead>
                 <tbody>
                     <?php if (empty($rows)): ?>
                         <tr>
-                            <td colspan="5" class="empty-cell">表示するデータがありません。</td>
+                            <td colspan="6" class="empty-cell">表示するデータがありません。</td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($rows as $row): ?>
-                            <?php
-                            $body = (string)($row['body'] ?? '');
-                            $toAccountIds = extractToAccountIds($body);
-                            $toLabels = [];
-                            foreach ($toAccountIds as $toAccountId) {
-                                $toName = trim((string)($usersByAccountId[$toAccountId] ?? ''));
-                                $toLabels[] = $toName !== ''
-                                    ? $toName . ' (' . $toAccountId . ')'
-                                    : ('ID: ' . $toAccountId);
-                            }
-                            ?>
                             <tr>
                                 <td class="mono"><?php echo h((string)$row['id']); ?></td>
                                 <td class="mono"><?php echo h($row['received_at']); ?></td>
-                                <td><?php echo h((string)($row['room_name'] ?? $row['room_id'])); ?></td>
                                 <td>
-                                    <?php if (empty($toLabels)): ?>
-                                        <span class="sub-text">指定なし</span>
-                                    <?php else: ?>
-                                        <div class="recipient-list">
-                                            <?php foreach ($toLabels as $toLabel): ?>
-                                                <span class="recipient-item"><?php echo h($toLabel); ?></span>
-                                            <?php endforeach; ?>
-                                        </div>
-                                    <?php endif; ?>
+                                    <span class="badge"><?php echo h($row['event_type']); ?></span>
                                 </td>
+                                <td class="mono"><?php echo h($row['room_id']); ?></td>
+                                <td><?php echo h($row['from_account_name']); ?></td>
                                 <td>
-                                    <div class="message-cell">
-                                        <?php echo nl2br(h($body)); ?>
+                                    <div class="message-cell" title="<?php echo h($row['body']); ?>">
+                                        <?php echo nl2br(h($row['body'])); ?>
                                     </div>
                                 </td>
                             </tr>
