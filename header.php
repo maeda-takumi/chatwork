@@ -12,7 +12,8 @@
   <div class="bg-gradient"></div>
   <header class="site-header glass">
     <div class="header-top">
-      <div>
+      <div class="header-title">
+        <img src="img/icon.png?v=<?php echo time(); ?>" alt="ChatSave" class="header-icon">
         <h1>ChatSave</h1>
       </div>
       <nav class="header-nav" aria-label="メインナビゲーション">

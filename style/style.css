@@ -2,7 +2,7 @@
   --bg: #0b1020;
   --text: #e6ecff;
   --muted: #9aa6c9;
-  --card: rgba(16, 22, 45, 0.55);
+  --card: rgba(16, 22, 45, 0.40);
   --border: rgba(255, 255, 255, 0.18);
   --accent-a: #8b5cf6;
   --accent-b: #06b6d4;
@@ -394,7 +394,14 @@ code {
 .message-card.is-complete > *:not(.complete-stamp) {
   opacity: .45;
 }
-
+.header-title{
+  display: flex;
+  gap: 10px;
+}
+.header-icon{
+    width: 50px;
+    height: auto;
+}
 .complete-stamp {
   position: absolute;
   top: 8px;
