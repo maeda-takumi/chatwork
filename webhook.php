@@ -13,46 +13,47 @@ header('Content-Type: application/json; charset=UTF-8');
 
 const CONFIG_FILE = __DIR__ . '/config.webhooks.php';
 const SQLITE_FILE = __DIR__ . '/webhooks.sqlite';
+const ERROR_LOG_FILE = __DIR__ . '/webhook_error.log';
 
 try {
     if ($_SERVER['REQUEST_METHOD'] !== 'POST') {
-        respond(405, ['ok' => false, 'error' => 'method_not_allowed']);
+        respondError(405, 'method_not_allowed');
     }
 
     if (!is_file(CONFIG_FILE)) {
-        respond(500, ['ok' => false, 'error' => 'config_not_found']);
+        respondError(500, 'config_not_found');
     }
 
     $config = require CONFIG_FILE;
     if (!is_array($config)) {
-        respond(500, ['ok' => false, 'error' => 'invalid_config']);
+        respondError(500, 'invalid_config');
     }
 
     $rawBody = file_get_contents('php://input');
     if ($rawBody === false || $rawBody === '') {
-        respond(400, ['ok' => false, 'error' => 'empty_body']);
+        respondError(400, 'empty_body');
     }
 
     $payload = json_decode($rawBody, true);
     if (!is_array($payload)) {
-        respond(400, ['ok' => false, 'error' => 'invalid_json']);
+        respondError(400, 'invalid_json');
     }
 
     $headers = getRequestHeadersLower();
 
     $webhookSettingId = findWebhookSettingId($payload);
     if ($webhookSettingId === null) {
-        respond(400, ['ok' => false, 'error' => 'webhook_setting_id_not_found']);
+        respondError(400, 'webhook_setting_id_not_found', ['payload' => $payload]);
     }
 
     $setting = findEnabledSettingById($config, $webhookSettingId);
     if ($setting === null) {
-        respond(403, ['ok' => false, 'error' => 'webhook_setting_not_allowed']);
+        respondError(403, 'webhook_setting_not_allowed', ['webhook_setting_id' => $webhookSettingId]);
     }
 
     $verified = verifyRequest($headers, $rawBody, (string)$setting['token']);
     if (!$verified) {
-        respond(401, ['ok' => false, 'error' => 'signature_or_token_mismatch']);
+        respondError(401, 'signature_or_token_mismatch', ['webhook_setting_id' => $webhookSettingId]);
     }
 
     $pdo = new PDO('sqlite:' . SQLITE_FILE, null, null, [
@@ -107,6 +108,7 @@ try {
         'event_type' => $eventType,
     ]);
 } catch (Throwable $e) {
+    logError('internal_server_error', ['exception' => $e->getMessage()]);
     respond(500, [
         'ok' => false,
         'error' => 'internal_server_error',
@@ -236,4 +238,29 @@ function respond(int $statusCode, array $body): void
     http_response_code($statusCode);
     echo json_encode($body, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     exit;
+}
+
+function respondError(int $statusCode, string $errorCode, array $context = []): void
+{
+    logError($errorCode, $context);
+    respond($statusCode, ['ok' => false, 'error' => $errorCode]);
+}
+
+function logError(string $errorCode, array $context = []): void
+{
+    $record = [
+        'timestamp' => gmdate('c'),
+        'error' => $errorCode,
+        'remote_addr' => (string)($_SERVER['REMOTE_ADDR'] ?? ''),
+        'request_method' => (string)($_SERVER['REQUEST_METHOD'] ?? ''),
+        'request_uri' => (string)($_SERVER['REQUEST_URI'] ?? ''),
+        'context' => $context,
+    ];
+
+    $line = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($line)) {
+        $line = '{"timestamp":"' . gmdate('c') . '","error":"json_encode_failed"}';
+    }
+
+    error_log($line . PHP_EOL, 3, ERROR_LOG_FILE);
 }
