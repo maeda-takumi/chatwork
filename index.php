@@ -11,6 +11,29 @@ $perPage = 30;
 $rooms = $pdo->query('SELECT id, room_id, room_name, room_icon FROM room ORDER BY room_name ASC')->fetchAll(PDO::FETCH_ASSOC);
 
 $users = $pdo->query('SELECT account_id, user_name, user_icon FROM users ORDER BY user_name ASC')->fetchAll(PDO::FETCH_ASSOC);
+function sqlite_table_exists(PDO $pdo, string $tableName): bool
+{
+    $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = :table_name LIMIT 1");
+    $stmt->execute([':table_name' => $tableName]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    return is_array($row);
+}
+
+function sqlite_has_column(PDO $pdo, string $tableName, string $columnName): bool
+{
+    $columns = $pdo->query('PRAGMA table_info(' . $tableName . ')')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($columns as $column) {
+        if ((string)($column['name'] ?? '') === $columnName) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+$hasTypeTable = sqlite_table_exists($pdo, 'type');
+$hasMessageTypeIdColumn = sqlite_has_column($pdo, 'message', 'type_id');
+$canJoinType = $hasTypeTable && $hasMessageTypeIdColumn;
 $sql = <<<'SQL'
 SELECT
     m.id,
@@ -20,6 +43,21 @@ SELECT
     m.body,
     m.send_time,
     COALESCE(m.task, 0) AS task,
+SQL;
+
+if ($canJoinType) {
+    $sql .= <<<'SQL'
+    m.type_id,
+    t.type_name,
+SQL;
+} else {
+    $sql .= <<<'SQL'
+    NULL AS type_id,
+    NULL AS type_name,
+SQL;
+}
+
+$sql .= <<<'SQL'
     r.room_name,
     r.room_icon,
     u.user_name,
@@ -27,6 +65,13 @@ SELECT
 FROM message m
 LEFT JOIN room r ON CAST(m.room_id AS TEXT) = r.room_id
 LEFT JOIN users u ON m.account_id = u.account_id
+SQL;
+
+if ($canJoinType) {
+    $sql .= "\nLEFT JOIN type t ON m.type_id = t.id\n";
+}
+
+$sql .= <<<'SQL'
 WHERE 1=1
 SQL;
 
@@ -155,6 +200,32 @@ function sanitize_message_body_for_display(string $body): string
 
     $cleaned = preg_replace("/\n{3,}/", "\n\n", (string)$cleaned);
     return trim((string)$cleaned);
+}
+function resolve_message_type_label(array $message): string
+{
+    $typeName = trim((string)($message['type_name'] ?? ''));
+    if ($typeName !== '') {
+        return $typeName;
+    }
+
+    return '不明';
+}
+
+function message_type_badge_class(string $typeName): string
+{
+    $map = [
+        '要対応' => 'type-need-action',
+        '要返信' => 'type-need-reply',
+        '要確認' => 'type-need-check',
+        '報告' => 'type-report',
+        '共有' => 'type-share',
+        '完了報告' => 'type-complete-report',
+        'お礼・リアクション' => 'type-thanks-reaction',
+        '雑談' => 'type-chat',
+        '不明' => 'type-unknown',
+    ];
+
+    return $map[$typeName] ?? 'type-unknown';
 }
 $targetUsersByAccountId = [];
 foreach ($users as $user) {
@@ -432,6 +503,8 @@ include __DIR__ . '/header.php';
           $formattedSendTime = date('Y/m/d H:i:s', $timestamp);
       }
       $isTaskDone = (int)($message['task'] ?? 0) === 1;
+      $messageTypeLabel = resolve_message_type_label($message);
+      $messageTypeBadgeClass = message_type_badge_class($messageTypeLabel);
       $isReplyChild = (bool)($message['is_reply_child'] ?? false);
       $replyDepth = max(0, (int)($message['reply_depth'] ?? 0));
       $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
@@ -445,6 +518,9 @@ include __DIR__ . '/header.php';
         <div class="card-head">
           <h2>#<?php echo (int)$message['id']; ?></h2>
           <div class="card-actions">
+            <span class="message-type-badge <?php echo htmlspecialchars($messageTypeBadgeClass, ENT_QUOTES, 'UTF-8'); ?>">
+              <?php echo htmlspecialchars($messageTypeLabel, ENT_QUOTES, 'UTF-8'); ?>
+            </span>
             <span class="badge"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
             <button type="button" class="task-toggle" data-task-state="<?php echo $isTaskDone ? '1' : '0'; ?>"><?php echo $isTaskDone ? '取消' : '完了'; ?></button>
           </div>

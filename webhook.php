@@ -1,6 +1,6 @@
 <?php
 declare(strict_types=1);
-
+require_once __DIR__ . '/gemini_message_classifier.php';
 /**
  * ChatWork Webhook Receiver
  *
@@ -67,29 +67,54 @@ try {
     createTableIfNotExists($pdo);
 
     $messageData = formatMessageData($payload, $setting);
-    $stmt = $pdo->prepare(
-        'INSERT INTO message (
-            room_id,
-            account_id,
-            body,
-            send_time,
-            message_id
-        ) VALUES (
-            :room_id,
-            :account_id,
-            :body,
-            :send_time,
-            :message_id
-        )'
-    );
-
-    $stmt->execute([
+    $typeName = classify_message_type_name((string)$messageData['body']);
+    $typeId = resolveTypeIdByName($pdo, $typeName);
+    $insertParams = [
         ':room_id' => $messageData['room_id'],
         ':account_id' => $messageData['account_id'],
         ':body' => $messageData['body'],
         ':send_time' => $messageData['send_time'],
         ':message_id' => $messageData['message_id'],
-    ]);
+    ];
+
+    if (hasColumn($pdo, 'message', 'type_id')) {
+        $stmt = $pdo->prepare(
+            'INSERT INTO message (
+                room_id,
+                account_id,
+                body,
+                send_time,
+                message_id,
+                type_id
+            ) VALUES (
+                :room_id,
+                :account_id,
+                :body,
+                :send_time,
+                :message_id,
+                :type_id
+            )'
+        );
+        $insertParams[':type_id'] = $typeId;
+    } else {
+        $stmt = $pdo->prepare(
+            'INSERT INTO message (
+                room_id,
+                account_id,
+                body,
+                send_time,
+                message_id
+            ) VALUES (
+                :room_id,
+                :account_id,
+                :body,
+                :send_time,
+                :message_id
+            )'
+        );
+    }
+
+    $stmt->execute($insertParams);
 
     respond(200, [
         'ok' => true,
@@ -116,12 +141,20 @@ function createTableIfNotExists(PDO $pdo): void
             body TEXT NOT NULL,
             send_time TEXT,
             task INTEGER NOT NULL DEFAULT 0,
-            message_id TEXT
+            message_id TEXT,
+            type_id INTEGER
+        )'
+    );
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS type (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type_name TEXT NOT NULL UNIQUE
         )'
     );
     $columns = $pdo->query('PRAGMA table_info(message)')->fetchAll(PDO::FETCH_ASSOC);
     $hasTaskColumn = false;
     $hasMessageIdColumn = false;
+    $hasTypeIdColumn = false;
     foreach ($columns as $column) {
         $name = (string)($column['name'] ?? '');
         if ($name === 'task') {
@@ -130,6 +163,9 @@ function createTableIfNotExists(PDO $pdo): void
         if ($name === 'message_id') {
             $hasMessageIdColumn = true;
         }
+        if ($name === 'type_id') {
+            $hasTypeIdColumn = true;
+        }
     }
     if (!$hasTaskColumn) {
         $pdo->exec('ALTER TABLE message ADD COLUMN task INTEGER NOT NULL DEFAULT 0');
@@ -137,11 +173,77 @@ function createTableIfNotExists(PDO $pdo): void
     if (!$hasMessageIdColumn) {
         $pdo->exec('ALTER TABLE message ADD COLUMN message_id TEXT');
     }
+    if (!$hasTypeIdColumn) {
+        $pdo->exec('ALTER TABLE message ADD COLUMN type_id INTEGER');
+    }
+    seedMessageTypes($pdo);
 
 
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_room_id ON message (room_id)');
     $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_send_time ON message (send_time)');
 }
+function seedMessageTypes(PDO $pdo): void
+{
+    if (!tableExists($pdo, 'type')) {
+        return;
+    }
+
+    $stmt = $pdo->prepare('INSERT OR IGNORE INTO type (type_name) VALUES (:type_name)');
+    $typeNames = [
+        '要対応',
+        '要返信',
+        '要確認',
+        '報告',
+        '共有',
+        '完了報告',
+        'お礼・リアクション',
+        '雑談',
+        '不明',
+    ];
+    foreach ($typeNames as $typeName) {
+        $stmt->execute([':type_name' => $typeName]);
+    }
+}
+
+function resolveTypeIdByName(PDO $pdo, string $typeName): ?int
+{
+    if (!tableExists($pdo, 'type')) {
+        return null;
+    }
+
+    $stmt = $pdo->prepare('SELECT id FROM type WHERE type_name = :type_name LIMIT 1');
+    $stmt->execute([':type_name' => $typeName]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+    if (!is_array($row) || !isset($row['id'])) {
+        return null;
+    }
+
+    return (int)$row['id'];
+}
+
+function hasColumn(PDO $pdo, string $tableName, string $columnName): bool
+{
+    $columns = $pdo->query('PRAGMA table_info(' . $tableName . ')')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($columns as $column) {
+        if ((string)($column['name'] ?? '') === $columnName) {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+function tableExists(PDO $pdo, string $tableName): bool
+{
+    $stmt = $pdo->prepare(
+        "SELECT name FROM sqlite_master WHERE type = 'table' AND name = :table_name LIMIT 1"
+    );
+    $stmt->execute([':table_name' => $tableName]);
+    $row = $stmt->fetch(PDO::FETCH_ASSOC);
+
+    return is_array($row);
+}
+
 
 function ensureDataDirectoryExists(): void
 {

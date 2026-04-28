@@ -37,7 +37,14 @@ function get_db(): PDO
             body TEXT NOT NULL,
             send_time TEXT,
             task INTEGER NOT NULL DEFAULT 0,
-            message_id TEXT
+            message_id TEXT,
+            type_id INTEGER
+        )'
+    );
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS type (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            type_name TEXT NOT NULL UNIQUE
         )'
     );
 
@@ -58,6 +65,7 @@ function ensure_message_columns(PDO $pdo): void
     $columns = $pdo->query('PRAGMA table_info(message)')->fetchAll(PDO::FETCH_ASSOC);
     $hasTask = false;
     $hasMessageId = false;
+    $hasTypeId = false;
     foreach ($columns as $column) {
         $name = (string)($column['name'] ?? '');
         if ($name === 'task') {
@@ -65,6 +73,9 @@ function ensure_message_columns(PDO $pdo): void
         }
         if ($name === 'message_id') {
             $hasMessageId = true;
+        }
+        if ($name === 'type_id') {
+            $hasTypeId = true;
         }
     }
 
@@ -74,5 +85,29 @@ function ensure_message_columns(PDO $pdo): void
 
     if (!$hasMessageId) {
         $pdo->exec('ALTER TABLE message ADD COLUMN message_id TEXT');
+    }
+    if (!$hasTypeId) {
+        $pdo->exec('ALTER TABLE message ADD COLUMN type_id INTEGER');
+    }
+
+    seed_message_types($pdo);
+}
+
+function seed_message_types(PDO $pdo): void
+{
+    $stmt = $pdo->prepare('INSERT OR IGNORE INTO type (type_name) VALUES (:type_name)');
+    $typeNames = [
+        '要対応',
+        '要返信',
+        '要確認',
+        '報告',
+        '共有',
+        '完了報告',
+        'お礼・リアクション',
+        '雑談',
+        '不明',
+    ];
+    foreach ($typeNames as $typeName) {
+        $stmt->execute([':type_name' => $typeName]);
     }
 }

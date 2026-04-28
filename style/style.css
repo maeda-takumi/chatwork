@@ -129,6 +129,26 @@ body {
   color: #fff;
   background: linear-gradient(90deg, var(--accent-a), var(--accent-b));
 }
+.message-type-badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: .22rem .62rem;
+  font-size: .75rem;
+  font-weight: 700;
+  color: #fff;
+  border: 1px solid rgba(255,255,255,.26);
+}
+
+.message-type-badge.type-need-action { background: linear-gradient(90deg, #ef4444, #f97316); }
+.message-type-badge.type-need-reply { background: linear-gradient(90deg, #f97316, #f59e0b); }
+.message-type-badge.type-need-check { background: linear-gradient(90deg, #eab308, #84cc16); }
+.message-type-badge.type-report { background: linear-gradient(90deg, #14b8a6, #0ea5e9); }
+.message-type-badge.type-share { background: linear-gradient(90deg, #06b6d4, #3b82f6); }
+.message-type-badge.type-complete-report { background: linear-gradient(90deg, #16a34a, #22c55e); }
+.message-type-badge.type-thanks-reaction { background: linear-gradient(90deg, #a855f7, #ec4899); }
+.message-type-badge.type-chat { background: linear-gradient(90deg, #6366f1, #8b5cf6); }
+.message-type-badge.type-unknown { background: linear-gradient(90deg, #6b7280, #4b5563); }
 
 .form-card {
   margin-bottom: 1rem;
