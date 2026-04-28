@@ -14,6 +14,7 @@ $users = $pdo->query('SELECT account_id, user_name, user_icon FROM users ORDER B
 $sql = <<<'SQL'
 SELECT
     m.id,
+    m.message_id,
     m.room_id,
     m.account_id,
     m.body,
@@ -136,6 +137,7 @@ foreach ($users as $user) {
 
 foreach ($messages as $index => $message) {
     $rawBody = (string)($message['body'] ?? '');
+    $messages[$index]['message_id'] = normalize_message_id((string)($message['message_id'] ?? ''));
     $target = parse_targets_from_body($rawBody);
     $messages[$index]['target_type'] = $target['type'];
     $messages[$index]['target_account_ids'] = $target['account_ids'];
@@ -167,7 +169,7 @@ $messages = array_slice($messages, $offset, $perPage);
 
 $messagesByMessageId = [];
 foreach ($messages as $message) {
-    $messageId = trim((string)($message['message_id'] ?? ''));
+    $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
     if ($messageId === '') {
         continue;
     }

@@ -423,10 +423,10 @@ code {
 
 .reply-branch-marker::after {
   bottom: 2px;
-  right: 0;
+  right: -1px;
   width: 0;
   height: 0;
-  border-width: 6px 0 6px 10px;
+  border-width: 9px 0 9px 10px;
   border-color: transparent transparent transparent rgba(6, 182, 212, .95);
 }
 
