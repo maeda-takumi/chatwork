@@ -203,7 +203,8 @@ foreach ($childrenByParentMessageId as $parentMessageId => $children) {
 $appendReplyChildren = static function (
     array $parentMessage,
     array $childrenByParentMessageId,
-    callable $appendReplyChildren
+    callable $appendReplyChildren,
+    int $depth = 1
 ): array {
     $collected = [];
     $parentMessageId = trim((string)($parentMessage['message_id'] ?? ''));
@@ -213,8 +214,9 @@ $appendReplyChildren = static function (
 
     foreach ($childrenByParentMessageId[$parentMessageId] as $childMessage) {
         $childMessage['is_reply_child'] = true;
+        $childMessage['reply_depth'] = $depth;
         $collected[] = $childMessage;
-        foreach ($appendReplyChildren($childMessage, $childrenByParentMessageId, $appendReplyChildren) as $nestedChild) {
+        foreach ($appendReplyChildren($childMessage, $childrenByParentMessageId, $appendReplyChildren, $depth + 1) as $nestedChild) {
             $nestedChild['is_reply_child'] = true;
             $collected[] = $nestedChild;
         }
@@ -230,8 +232,9 @@ foreach ($messages as $message) {
         continue;
     }
 
+    $message['reply_depth'] = 0;
     $messagesWithHierarchy[] = $message;
-    foreach ($appendReplyChildren($message, $childrenByParentMessageId, $appendReplyChildren) as $childMessage) {
+    foreach ($appendReplyChildren($message, $childrenByParentMessageId, $appendReplyChildren, 1) as $childMessage) {
         $messagesWithHierarchy[] = $childMessage;
     }
 }
@@ -398,78 +401,81 @@ include __DIR__ . '/header.php';
       }
       $isTaskDone = (int)($message['task'] ?? 0) === 1;
       $isReplyChild = (bool)($message['is_reply_child'] ?? false);
+      $replyDepth = max(0, (int)($message['reply_depth'] ?? 0));
       $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
     ?>
-    <article class="card glass message-card <?php echo $isTaskDone ? 'is-complete' : ''; ?> <?php echo $isReplyChild ? 'is-reply-child' : ''; ?>" data-message-id="<?php echo (int)$message['id']; ?>">
-      <img class="complete-stamp" src="img/complete.png" alt="完了" onerror="this.style.display='none';">
-      <div class="card-head">
-        <h2>#<?php echo (int)$message['id']; ?></h2>
-        <div class="card-actions">
-          <span class="badge"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
-          <button type="button" class="task-toggle" data-task-state="<?php echo $isTaskDone ? '1' : '0'; ?>"><?php echo $isTaskDone ? '取消' : '完了'; ?></button>
-        </div>
-      </div>
-
-      <div class="message-meta-row">
-
-        <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>">
-          <strong>ルーム情報</strong>
-          <img src="<?php echo htmlspecialchars($roomIcon !== '' ? $roomIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-
-          <span><?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-        </div>
-
-        <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>">
-          <strong>送信者</strong>
-          <img src="<?php echo htmlspecialchars($senderIcon !== '' ? $senderIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-          <span><?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-        </div>
-
-        <?php foreach ($targetEntries as $targetEntry): ?>
-          <?php
-            $targetLabel = (string)($targetEntry['label'] ?? '対象者なし');
-            $targetIcon = trim((string)($targetEntry['icon'] ?? ''));
-          ?>
-          <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
-            <strong>対象者</strong>
-            <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-            <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-          </div>
-        <?php endforeach; ?>
-      </div>
-
-      <?php if ($replyToMessageId !== ''): ?>
-        <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
+    <div class="message-thread-item <?php echo $isReplyChild ? 'is-reply-child' : ''; ?>" style="--reply-level: <?php echo $replyDepth; ?>;">
+      <?php if ($isReplyChild): ?>
+        <div class="reply-branch-marker" aria-hidden="true"></div>
       <?php endif; ?>
+      <article class="card glass message-card <?php echo $isTaskDone ? 'is-complete' : ''; ?>" data-message-id="<?php echo (int)$message['id']; ?>">
+        <img class="complete-stamp" src="img/complete.png" alt="完了" onerror="this.style.display='none';">
+        <div class="card-head">
+          <h2>#<?php echo (int)$message['id']; ?></h2>
+          <div class="card-actions">
+            <span class="badge"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
+            <button type="button" class="task-toggle" data-task-state="<?php echo $isTaskDone ? '1' : '0'; ?>"><?php echo $isTaskDone ? '取消' : '完了'; ?></button>
+          </div>
+        </div>
+        <div class="message-meta-row">
 
-      <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
-      <?php
-        $attachments = is_array($message['attachments'] ?? null) ? $message['attachments'] : [];
-        $downloadRoomId = (int)($message['room_id'] ?? 0);
-      ?>
-      <?php if ($downloadRoomId > 0 && $attachments !== []): ?>
-        <div class="attachment-links">
-          <?php foreach ($attachments as $attachment): ?>
+          <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>">
+            <strong>ルーム情報</strong>
+            <img src="<?php echo htmlspecialchars($roomIcon !== '' ? $roomIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+            
+            <span><?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+          </div>
+          <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>">
+            <strong>送信者</strong>
+            <img src="<?php echo htmlspecialchars($senderIcon !== '' ? $senderIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+            <span><?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+          </div>
+
+          <?php foreach ($targetEntries as $targetEntry): ?>
             <?php
-              $fileId = trim((string)($attachment['file_id'] ?? ''));
-              $fileLabel = trim((string)($attachment['file_label'] ?? ''));
-              if ($fileId === '') {
-                  continue;
-              }
+              $targetLabel = (string)($targetEntry['label'] ?? '対象者なし');
+              $targetIcon = trim((string)($targetEntry['icon'] ?? ''));
             ?>
-            <a
-              class="attachment-link"
-              href="download_attachment.php?room_id=<?php echo $downloadRoomId; ?>&amp;file_id=<?php echo urlencode($fileId); ?>"
-              target="_blank"
-              rel="noopener noreferrer"
-            >
-              <span><?php echo htmlspecialchars($fileLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-              <img src="img/download.png" alt="ダウンロード" onerror="this.style.display='none';">
-            </a>
+            <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
+              <strong>対象者</strong>
+              <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+              <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+            </div>
           <?php endforeach; ?>
         </div>
-      <?php endif; ?>
-    </article>
+        <?php if ($replyToMessageId !== ''): ?>
+          <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+
+        <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
+        <?php
+          $attachments = is_array($message['attachments'] ?? null) ? $message['attachments'] : [];
+          $downloadRoomId = (int)($message['room_id'] ?? 0);
+        ?>
+        <?php if ($downloadRoomId > 0 && $attachments !== []): ?>
+          <div class="attachment-links">
+            <?php foreach ($attachments as $attachment): ?>
+              <?php
+                $fileId = trim((string)($attachment['file_id'] ?? ''));
+                $fileLabel = trim((string)($attachment['file_label'] ?? ''));
+                if ($fileId === '') {
+                    continue;
+                }
+              ?>
+              <a
+                class="attachment-link"
+                href="download_attachment.php?room_id=<?php echo $downloadRoomId; ?>&amp;file_id=<?php echo urlencode($fileId); ?>"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <span><?php echo htmlspecialchars($fileLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                <img src="img/download.png" alt="ダウンロード" onerror="this.style.display='none';">
+              </a>
+            <?php endforeach; ?>
+          </div>
+        <?php endif; ?>
+      </article>
+    </div>
   <?php endforeach; ?>
 </section>
 
