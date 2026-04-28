@@ -51,7 +51,7 @@ function parse_targets_from_body(string $body): array
         return ['type' => 'all', 'account_ids' => []];
     }
 
-    if (preg_match_all('/\[to:\s*([^\]\s]+)\]/i', $body, $matches) > 0) {
+    if (preg_match_all('/\[to[:：]\s*([^\]\s]+)\]/i', $body, $matches) > 0) {
         $accountIds = array_values(array_unique(array_filter(array_map(static fn(string $value): string => trim($value), $matches[1] ?? []), static fn(string $value): bool => $value !== '')));
         return ['type' => 'user', 'account_ids' => $accountIds];
     }
@@ -140,8 +140,21 @@ function sanitize_message_body_for_display(string $body): string
         return '';
     }
 
-    $cleaned = preg_replace('/^\[rp[^\]]*\]/i', '', $body);
-    return ltrim((string)$cleaned);
+    $cleaned = $body;
+    $patterns = [
+        '/^\[rp[^\]]*\]/i',
+        '/\[toall\]/i',
+        '/\[to[:：]\s*[^\]\s]+\][^\r\n]*(?:\r?\n)?/i',
+        '/\[download:\d+\].*?\[\/download\]/is',
+        '/\[info\]\s*\[title\]\s*\[dtext:file_uploaded\]\s*\[\/title\].*?\[\/info\]\s*/is',
+    ];
+
+    foreach ($patterns as $pattern) {
+        $cleaned = preg_replace($pattern, '', (string)$cleaned);
+    }
+
+    $cleaned = preg_replace("/\n{3,}/", "\n\n", (string)$cleaned);
+    return trim((string)$cleaned);
 }
 $targetUsersByAccountId = [];
 foreach ($users as $user) {
