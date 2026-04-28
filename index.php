@@ -98,24 +98,50 @@ function parse_reply_to_message_id(string $body): ?string
         return null;
     }
 
-    if (preg_match('/\[rp[^\]]*\bto=(\d+)\b[^\]]*\]/i', $body, $matches) === 1) {
+    if (preg_match('/\[rp[^\]]*\bto=([^\]\s]+)[^\]]*\]/i', $body, $matches) === 1) {
         return trim((string)($matches[1] ?? '')) ?: null;
     }
 
     return null;
 }
 
+function normalize_message_id(string $messageId): string
+{
+    $trimmed = trim($messageId);
+    if ($trimmed === '') {
+        return '';
+    }
+
+    if (preg_match('/^\d+-\d+$/', $trimmed) === 1) {
+        $parts = explode('-', $trimmed, 2);
+        return trim((string)($parts[1] ?? ''));
+    }
+
+    return $trimmed;
+}
+
+function sanitize_message_body_for_display(string $body): string
+{
+    if ($body === '') {
+        return '';
+    }
+
+    $cleaned = preg_replace('/^\[rp[^\]]*\]/i', '', $body);
+    return ltrim((string)$cleaned);
+}
 $targetUsersByAccountId = [];
 foreach ($users as $user) {
     $targetUsersByAccountId[(string)$user['account_id']] = $user;
 }
 
 foreach ($messages as $index => $message) {
-    $target = parse_targets_from_body((string)($message['body'] ?? ''));
+    $rawBody = (string)($message['body'] ?? '');
+    $target = parse_targets_from_body($rawBody);
     $messages[$index]['target_type'] = $target['type'];
     $messages[$index]['target_account_ids'] = $target['account_ids'];
-    $messages[$index]['attachments'] = parse_attachments_from_body((string)($message['body'] ?? ''));
-    $messages[$index]['reply_to_message_id'] = parse_reply_to_message_id((string)($message['body'] ?? ''));
+    $messages[$index]['attachments'] = parse_attachments_from_body($rawBody);
+    $messages[$index]['reply_to_message_id'] = normalize_message_id((string)(parse_reply_to_message_id($rawBody) ?? ''));
+    $messages[$index]['body_for_display'] = sanitize_message_body_for_display($rawBody);
 }
 
 if ($selectedTarget !== '') {
@@ -411,12 +437,12 @@ include __DIR__ . '/header.php';
           </div>
         <?php endforeach; ?>
       </div>
-      
+
       <?php if ($replyToMessageId !== ''): ?>
         <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
       <?php endif; ?>
 
-      <div class="message-body"><?php echo nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')); ?></div>
+      <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
       <?php
         $attachments = is_array($message['attachments'] ?? null) ? $message['attachments'] : [];
         $downloadRoomId = (int)($message['room_id'] ?? 0);
