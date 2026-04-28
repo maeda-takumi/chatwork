@@ -92,6 +92,19 @@ function parse_attachments_from_body(string $body): array
 }
 
 
+function parse_reply_to_message_id(string $body): ?string
+{
+    if ($body === '') {
+        return null;
+    }
+
+    if (preg_match('/\[rp[^\]]*\bto=(\d+)\b[^\]]*\]/i', $body, $matches) === 1) {
+        return trim((string)($matches[1] ?? '')) ?: null;
+    }
+
+    return null;
+}
+
 $targetUsersByAccountId = [];
 foreach ($users as $user) {
     $targetUsersByAccountId[(string)$user['account_id']] = $user;
@@ -102,6 +115,7 @@ foreach ($messages as $index => $message) {
     $messages[$index]['target_type'] = $target['type'];
     $messages[$index]['target_account_ids'] = $target['account_ids'];
     $messages[$index]['attachments'] = parse_attachments_from_body((string)($message['body'] ?? ''));
+    $messages[$index]['reply_to_message_id'] = parse_reply_to_message_id((string)($message['body'] ?? ''));
 }
 
 if ($selectedTarget !== '') {
@@ -124,6 +138,79 @@ if ($page > $totalPages) {
 }
 $offset = ($page - 1) * $perPage;
 $messages = array_slice($messages, $offset, $perPage);
+
+$messagesByMessageId = [];
+foreach ($messages as $message) {
+    $messageId = trim((string)($message['message_id'] ?? ''));
+    if ($messageId === '') {
+        continue;
+    }
+    $messagesByMessageId[$messageId] = $message;
+}
+
+$childrenByParentMessageId = [];
+foreach ($messages as $message) {
+    $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
+    if ($replyToMessageId === '' || !isset($messagesByMessageId[$replyToMessageId])) {
+        continue;
+    }
+
+    if (!isset($childrenByParentMessageId[$replyToMessageId])) {
+        $childrenByParentMessageId[$replyToMessageId] = [];
+    }
+    $childrenByParentMessageId[$replyToMessageId][] = $message;
+}
+
+foreach ($childrenByParentMessageId as $parentMessageId => $children) {
+    usort($children, static function (array $a, array $b): int {
+        $aTime = strtotime((string)($a['send_time'] ?? '')) ?: 0;
+        $bTime = strtotime((string)($b['send_time'] ?? '')) ?: 0;
+        if ($aTime === $bTime) {
+            return ((int)($a['id'] ?? 0)) <=> ((int)($b['id'] ?? 0));
+        }
+
+        return $aTime <=> $bTime;
+    });
+    $childrenByParentMessageId[$parentMessageId] = $children;
+}
+
+$appendReplyChildren = static function (
+    array $parentMessage,
+    array $childrenByParentMessageId,
+    callable $appendReplyChildren
+): array {
+    $collected = [];
+    $parentMessageId = trim((string)($parentMessage['message_id'] ?? ''));
+    if ($parentMessageId === '' || !isset($childrenByParentMessageId[$parentMessageId])) {
+        return $collected;
+    }
+
+    foreach ($childrenByParentMessageId[$parentMessageId] as $childMessage) {
+        $childMessage['is_reply_child'] = true;
+        $collected[] = $childMessage;
+        foreach ($appendReplyChildren($childMessage, $childrenByParentMessageId, $appendReplyChildren) as $nestedChild) {
+            $nestedChild['is_reply_child'] = true;
+            $collected[] = $nestedChild;
+        }
+    }
+
+    return $collected;
+};
+
+$messagesWithHierarchy = [];
+foreach ($messages as $message) {
+    $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
+    if ($replyToMessageId !== '' && isset($messagesByMessageId[$replyToMessageId])) {
+        continue;
+    }
+
+    $messagesWithHierarchy[] = $message;
+    foreach ($appendReplyChildren($message, $childrenByParentMessageId, $appendReplyChildren) as $childMessage) {
+        $messagesWithHierarchy[] = $childMessage;
+    }
+}
+
+$messages = $messagesWithHierarchy;
 
 $selectedTargetUser = $selectedTarget !== '' ? ($targetUsersByAccountId[$selectedTarget] ?? null) : null;
 $selectedTargetLabel = '対象者を選択';
@@ -284,8 +371,10 @@ include __DIR__ . '/header.php';
           $formattedSendTime = date('Y/m/d H:i:s', $timestamp);
       }
       $isTaskDone = (int)($message['task'] ?? 0) === 1;
+      $isReplyChild = (bool)($message['is_reply_child'] ?? false);
+      $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
     ?>
-    <article class="card glass message-card <?php echo $isTaskDone ? 'is-complete' : ''; ?>" data-message-id="<?php echo (int)$message['id']; ?>">
+    <article class="card glass message-card <?php echo $isTaskDone ? 'is-complete' : ''; ?> <?php echo $isReplyChild ? 'is-reply-child' : ''; ?>" data-message-id="<?php echo (int)$message['id']; ?>">
       <img class="complete-stamp" src="img/complete.png" alt="完了" onerror="this.style.display='none';">
       <div class="card-head">
         <h2>#<?php echo (int)$message['id']; ?></h2>
@@ -322,6 +411,10 @@ include __DIR__ . '/header.php';
           </div>
         <?php endforeach; ?>
       </div>
+      
+      <?php if ($replyToMessageId !== ''): ?>
+        <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
+      <?php endif; ?>
 
       <div class="message-body"><?php echo nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')); ?></div>
       <?php

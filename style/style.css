@@ -385,6 +385,18 @@ code {
   position: relative;
   overflow: hidden;
 }
+.message-card.is-reply-child {
+  margin-left: 1.5rem;
+  border-left: 3px solid rgba(6, 182, 212, .75);
+}
+.message-card.is-reply-child::before {
+  content: "↳ 返信";
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: .72rem;
+  color: var(--muted);
+}
 
 .message-card.is-complete {
   background: rgba(4, 6, 16, .85);
@@ -521,4 +533,9 @@ code {
   width: 16px;
   height: 16px;
   object-fit: contain;
+}
+.reply-meta {
+  font-size: .75rem;
+  color: var(--muted);
+  margin-bottom: .45rem;
 }
