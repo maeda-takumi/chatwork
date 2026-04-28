@@ -5,6 +5,7 @@ const GEMINI_API_KEY = 'AIzaSyAFVTnrJn97x9FmS-qUK7fCDNnDIhL2cso';
 const GEMINI_MODEL = 'gemma-3-27b-it';
 const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
+const GEMINI_ERROR_LOG_FILE = __DIR__ . '/webhook_error.log';
 /**
  * メッセージ本文をタイプ名に分類する。
  * API呼び出しに失敗した場合は「不明」を返す。
@@ -81,9 +82,29 @@ function callGeminiApi(string $prompt): ?array
             'responseMimeType' => 'application/json',
         ],
     ];
+    $response = requestGeminiApi($url, $payload);
+    if ($response !== null) {
+        return $response;
+    }
+
+    // gemma-3-27b-it など JSON mode 非対応モデル向けのフォールバック。
+    unset($payload['generationConfig']['responseMimeType']);
+    return requestGeminiApi($url, $payload);
+}
+
+function requestGeminiApi(string $url, array $payload): ?array
+{
 
     $ch = curl_init($url);
     if ($ch === false) {
+        logGeminiError('curl_init_failed', [
+            'url' => $url,
+        ]);
+        return null;
+    }
+    $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($jsonPayload) || $jsonPayload === '') {
+        curl_close($ch);
         return null;
     }
 
@@ -91,20 +112,64 @@ function callGeminiApi(string $prompt): ?array
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
         CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
-        CURLOPT_POSTFIELDS => json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+        CURLOPT_POSTFIELDS => $jsonPayload,
         CURLOPT_TIMEOUT => 10,
     ]);
 
     $result = curl_exec($ch);
     $statusCode = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $curlError = curl_error($ch);
+    $curlErrno = curl_errno($ch);
     curl_close($ch);
 
     if (!is_string($result) || $result === '' || $statusCode < 200 || $statusCode >= 300) {
+        logGeminiError('gemini_api_request_failed', [
+            'url' => $url,
+            'status_code' => $statusCode,
+            'curl_errno' => $curlErrno,
+            'curl_error' => $curlError,
+            'response_excerpt' => is_string($result) ? mb_substr($result, 0, 500) : null,
+        ]);
         return null;
     }
 
     $decoded = json_decode($result, true);
-    return is_array($decoded) ? $decoded : null;
+    if (!is_array($decoded)) {
+        logGeminiError('gemini_api_invalid_json', [
+            'url' => $url,
+            'status_code' => $statusCode,
+            'response_excerpt' => mb_substr($result, 0, 500),
+        ]);
+        return null;
+    }
+
+    if (isset($decoded['error']) && is_array($decoded['error'])) {
+        logGeminiError('gemini_api_error_response', [
+            'url' => $url,
+            'status_code' => $statusCode,
+            'api_error' => $decoded['error'],
+        ]);
+        return null;
+    }
+
+    return $decoded;
+}
+
+function logGeminiError(string $errorCode, array $context = []): void
+{
+    $record = [
+        'timestamp' => gmdate('c'),
+        'error' => $errorCode,
+        'component' => 'gemini_message_classifier',
+        'context' => $context,
+    ];
+
+    $line = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($line)) {
+        $line = '{"timestamp":"' . gmdate('c') . '","error":"json_encode_failed","component":"gemini_message_classifier"}';
+    }
+
+    error_log($line . PHP_EOL, 3, GEMINI_ERROR_LOG_FILE);
 }
 
 function extractCandidateText(array $response): ?string
