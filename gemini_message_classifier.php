@@ -14,21 +14,27 @@ function classify_message_type_name(string $messageBody): string
 {
     $messageBody = trim($messageBody);
     if ($messageBody === '') {
+        logGeminiError('gemini_message_empty');
         return '不明';
     }
 
-    if (GEMINI_API_KEY === '' || GEMINI_API_KEY === 'DUMMY_GEMINI_API_KEY') {
+    $apiKey = getGeminiApiKey();
+    if ($apiKey === '' || $apiKey === 'DUMMY_GEMINI_API_KEY') {
+        logGeminiError('gemini_api_key_missing_or_dummy');
         return '不明';
     }
 
     $prompt = buildClassificationPrompt($messageBody);
-    $response = callGeminiApi($prompt);
+    $response = callGeminiApi($prompt, $apiKey);
     if (!is_array($response)) {
         return '不明';
     }
 
     $text = extractCandidateText($response);
     if ($text === null) {
+        logGeminiError('gemini_api_empty_candidate_text', [
+            'response_excerpt' => mb_substr(json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '', 0, 500),
+        ]);
         return '不明';
     }
 
@@ -65,9 +71,19 @@ function buildClassificationPrompt(string $messageBody): string
 PROMPT;
 }
 
-function callGeminiApi(string $prompt): ?array
+function getGeminiApiKey(): string
 {
-    $url = GEMINI_API_ENDPOINT . rawurlencode(GEMINI_MODEL) . ':generateContent?key=' . rawurlencode(GEMINI_API_KEY);
+    if (!defined('GEMINI_API_KEY')) {
+        logGeminiError('gemini_api_key_constant_not_defined');
+        return '';
+    }
+
+    return trim((string)constant('GEMINI_API_KEY'));
+}
+
+function callGeminiApi(string $prompt, string $apiKey): ?array
+{
+    $url = GEMINI_API_ENDPOINT . rawurlencode(GEMINI_MODEL) . ':generateContent?key=' . rawurlencode($apiKey);
 
     $payload = [
         'contents' => [
