@@ -58,6 +58,39 @@ function parse_targets_from_body(string $body): array
     return ['type' => 'none', 'account_ids' => []];
 }
 
+function parse_attachments_from_body(string $body): array
+{
+    if ($body === '') {
+        return [];
+    }
+
+    $matches = [];
+    preg_match_all('/\[download:(\d+)\](.*?)\[\/download\]/is', $body, $matches, PREG_SET_ORDER);
+    if ($matches === []) {
+        return [];
+    }
+
+    $attachments = [];
+    foreach ($matches as $match) {
+        $fileId = trim((string)($match[1] ?? ''));
+        $fileLabel = trim((string)($match[2] ?? ''));
+        if ($fileId === '') {
+            continue;
+        }
+
+        if ($fileLabel === '') {
+            $fileLabel = 'file_id: ' . $fileId;
+        }
+
+        $attachments[] = [
+            'file_id' => $fileId,
+            'file_label' => $fileLabel,
+        ];
+    }
+
+    return $attachments;
+}
+
 
 $targetUsersByAccountId = [];
 foreach ($users as $user) {
@@ -68,6 +101,7 @@ foreach ($messages as $index => $message) {
     $target = parse_targets_from_body((string)($message['body'] ?? ''));
     $messages[$index]['target_type'] = $target['type'];
     $messages[$index]['target_account_ids'] = $target['account_ids'];
+    $messages[$index]['attachments'] = parse_attachments_from_body((string)($message['body'] ?? ''));
 }
 
 if ($selectedTarget !== '') {
@@ -283,13 +317,39 @@ include __DIR__ . '/header.php';
           ?>
           <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
             <strong>対象者</strong>
-            <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/all.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/all.png';">
+            <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
             <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
           </div>
         <?php endforeach; ?>
       </div>
 
       <div class="message-body"><?php echo nl2br(htmlspecialchars((string)$message['body'], ENT_QUOTES, 'UTF-8')); ?></div>
+      <?php
+        $attachments = is_array($message['attachments'] ?? null) ? $message['attachments'] : [];
+        $downloadRoomId = (int)($message['room_id'] ?? 0);
+      ?>
+      <?php if ($downloadRoomId > 0 && $attachments !== []): ?>
+        <div class="attachment-links">
+          <?php foreach ($attachments as $attachment): ?>
+            <?php
+              $fileId = trim((string)($attachment['file_id'] ?? ''));
+              $fileLabel = trim((string)($attachment['file_label'] ?? ''));
+              if ($fileId === '') {
+                  continue;
+              }
+            ?>
+            <a
+              class="attachment-link"
+              href="download_attachment.php?room_id=<?php echo $downloadRoomId; ?>&amp;file_id=<?php echo urlencode($fileId); ?>"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <span><?php echo htmlspecialchars($fileLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+              <img src="img/download.png" alt="ダウンロード" onerror="this.style.display='none';">
+            </a>
+          <?php endforeach; ?>
+        </div>
+      <?php endif; ?>
     </article>
   <?php endforeach; ?>
 </section>

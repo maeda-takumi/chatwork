@@ -20,7 +20,7 @@
         <a href="index.php">ホーム</a>
         <a href="users.php">ユーザ追加</a>
         <a href="rooms.php">ルーム追加</a>
-        <a href="attachments.php">添付一覧</a>
+        <!-- <a href="attachments.php">添付一覧</a> -->
       </nav>
     </div>
   </header>
