@@ -51,6 +51,7 @@ function buildClassificationPrompt(string $messageBody): string
     return <<<PROMPT
 次のメッセージを意味ベースで1つだけ分類してください。
 キーワード一致ではなく、文脈と意図で判断してください。
+「不明」は最後の手段です。内容が日本語として読めて意図が推測できる場合は、必ず他の分類を選んでください。
 
 分類候補:
 - 要対応
@@ -62,6 +63,17 @@ function buildClassificationPrompt(string $messageBody): string
 - お礼・リアクション
 - 雑談
 - 不明
+
+判定ルール:
+- 依頼・指示・対応要求（「お願いします」「送付して」「対応ください」など）: 要対応
+- 質問・返答待ち: 要返信
+- 確認依頼・確認中共有: 要確認
+- 進捗や実施内容の連絡: 報告
+- 情報展開・案内・ログイン情報共有: 共有
+- 完了した旨の連絡: 完了報告
+- 感謝・称賛・スタンプ的短文（「ありがとう」「いいね！」など）: お礼・リアクション
+- 軽い会話・業務外雑談: 雑談
+- 文字化け・意味不明・判定不能な断片のみ: 不明
 
 出力形式(JSONのみ):
 {"type":"分類名"}
@@ -205,6 +217,7 @@ function extractCandidateText(array $response): ?string
 
 function normalizeTypeName(string $typeName): string
 {
+    $typeName = sanitizeTypeName($typeName);
     $allowed = [
         '要対応',
         '要返信',
@@ -222,5 +235,55 @@ function normalizeTypeName(string $typeName): string
         return $typeName;
     }
 
+    $aliases = [
+        '対応依頼' => '要対応',
+        '要対応事項' => '要対応',
+        '返信要' => '要返信',
+        '返信必要' => '要返信',
+        '確認依頼' => '要確認',
+        '確認事項' => '要確認',
+        '進捗報告' => '報告',
+        '連絡' => '共有',
+        '情報共有' => '共有',
+        '共有事項' => '共有',
+        '完了' => '完了報告',
+        '完了連絡' => '完了報告',
+        'お礼' => 'お礼・リアクション',
+        'リアクション' => 'お礼・リアクション',
+        '感謝' => 'お礼・リアクション',
+        '雑談・その他' => '雑談',
+        'その他' => '雑談',
+        '未知' => '不明',
+    ];
+    if (isset($aliases[$typeName])) {
+        return $aliases[$typeName];
+    }
+
     return '不明';
+}
+function sanitizeTypeName(string $rawTypeName): string
+{
+    $typeName = trim($rawTypeName);
+    if ($typeName === '') {
+        return '';
+    }
+
+    $typeName = preg_replace('/^```(?:json)?/u', '', $typeName) ?? $typeName;
+    $typeName = preg_replace('/```$/u', '', $typeName) ?? $typeName;
+    $typeName = trim($typeName);
+
+    if (str_contains($typeName, "\n")) {
+        $lines = preg_split('/\R/u', $typeName);
+        if (is_array($lines)) {
+            foreach ($lines as $line) {
+                $line = trim((string)$line);
+                if ($line !== '') {
+                    $typeName = $line;
+                    break;
+                }
+            }
+        }
+    }
+
+    return trim($typeName, " \t\n\r\0\x0B\"'{}[]");
 }
