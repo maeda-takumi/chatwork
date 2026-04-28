@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const GEMINI_API_KEY = 'AIzaSyAyWrNtfYH79UshNQ3MMZ8keExujG0vBy8';
+require_once __DIR__ . '/config.php';
 const GEMINI_MODEL = 'gemma-3-27b-it';
 const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
