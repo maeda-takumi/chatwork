@@ -106,6 +106,19 @@ function parse_reply_to_message_id(string $body): ?string
     return null;
 }
 
+function parse_reply_target_account_id(string $body): ?string
+{
+    if ($body === '') {
+        return null;
+    }
+
+    if (preg_match('/\[rp[^\]]*\baid=([^\]\s]+)[^\]]*\]/i', $body, $matches) === 1) {
+        return trim((string)($matches[1] ?? '')) ?: null;
+    }
+
+    return null;
+}
+
 function normalize_message_id(string $messageId): string
 {
     $trimmed = trim($messageId);
@@ -139,6 +152,10 @@ foreach ($messages as $index => $message) {
     $rawBody = (string)($message['body'] ?? '');
     $messages[$index]['message_id'] = normalize_message_id((string)($message['message_id'] ?? ''));
     $target = parse_targets_from_body($rawBody);
+    $replyTargetAccountId = parse_reply_target_account_id($rawBody);
+    if ($replyTargetAccountId !== null) {
+        $target = ['type' => 'user', 'account_ids' => [$replyTargetAccountId]];
+    }
     $messages[$index]['target_type'] = $target['type'];
     $messages[$index]['target_account_ids'] = $target['account_ids'];
     $messages[$index]['attachments'] = parse_attachments_from_body($rawBody);
