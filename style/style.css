@@ -252,6 +252,35 @@ code {
 .search-row {
   margin-bottom: .9rem;
 }
+.type-filter-wrap {
+  display: grid;
+  gap: .45rem;
+}
+.type-filter-wrap strong {
+  font-size: .85rem;
+  color: var(--muted);
+}
+.type-filter-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .45rem;
+}
+.type-filter-chip {
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.2);
+  border-radius: 999px;
+  padding: 2px;
+}
+.type-filter-chip .message-type-badge {
+  opacity: .32;
+}
+.type-filter-chip.is-active {
+  border-color: rgba(139, 92, 246, .9);
+  box-shadow: 0 0 0 2px rgba(139, 92, 246, .28);
+}
+.type-filter-chip.is-active .message-type-badge {
+  opacity: 1;
+}
 
 .icon-filter-row {
   display: flex;

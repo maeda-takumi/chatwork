@@ -14,6 +14,13 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   });
   const dropdown = document.querySelector('[data-target-dropdown]');
+  const searchForm = document.querySelector('[data-search-form]');
+  const submitSearchForm = () => {
+    if (!searchForm) {
+      return;
+    }
+    searchForm.requestSubmit();
+  };
   if (dropdown) {
     const toggle = dropdown.querySelector('[data-target-toggle]');
     const menu = dropdown.querySelector('[data-target-menu]');
@@ -34,6 +41,7 @@ window.addEventListener('DOMContentLoaded', () => {
         if (currentImg) currentImg.setAttribute('src', img);
         if (currentLabel) currentLabel.textContent = label;
         dropdown.classList.remove('is-open');
+        submitSearchForm();
       });
     });
 
@@ -44,6 +52,45 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
+  if (searchForm) {
+    const textInput = searchForm.querySelector('[data-search-text-input]');
+    let textInputTimer = null;
+    textInput?.addEventListener('input', () => {
+      if (textInputTimer) {
+        clearTimeout(textInputTimer);
+      }
+      textInputTimer = window.setTimeout(() => {
+        submitSearchForm();
+      }, 350);
+    });
+
+    const typeHiddenContainer = searchForm.querySelector('[data-type-hidden-container]');
+    const updateTypeHiddenInputs = () => {
+      if (!typeHiddenContainer) {
+        return;
+      }
+      typeHiddenContainer.innerHTML = '';
+      searchForm.querySelectorAll('[data-type-toggle].is-active').forEach((button) => {
+        const typeName = button.getAttribute('data-type-name') || '';
+        if (!typeName) {
+          return;
+        }
+        const hidden = document.createElement('input');
+        hidden.type = 'hidden';
+        hidden.name = 'type[]';
+        hidden.value = typeName;
+        typeHiddenContainer.appendChild(hidden);
+      });
+    };
+
+    searchForm.querySelectorAll('[data-type-toggle]').forEach((button) => {
+      button.addEventListener('click', () => {
+        button.classList.toggle('is-active');
+        updateTypeHiddenInputs();
+        submitSearchForm();
+      });
+    });
+  }
   document.querySelectorAll('.task-toggle').forEach((button) => {
     button.addEventListener('click', async () => {
       const card = button.closest('.message-card');

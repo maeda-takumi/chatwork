@@ -5,6 +5,11 @@ $pdo = get_db();
 $q = trim((string)($_GET['q'] ?? ''));
 $selectedRoomId = trim((string)($_GET['room_id'] ?? ''));
 $selectedTarget = trim((string)($_GET['target'] ?? ''));
+$selectedTypes = $_GET['type'] ?? [];
+if (!is_array($selectedTypes)) {
+    $selectedTypes = [$selectedTypes];
+}
+$selectedTypes = array_values(array_unique(array_filter(array_map(static fn($value): string => trim((string)$value), $selectedTypes), static fn(string $value): bool => $value !== '')));
 $page = max(1, (int)($_GET['page'] ?? 1));
 $perPage = 30;
 
@@ -34,6 +39,11 @@ function sqlite_has_column(PDO $pdo, string $tableName, string $columnName): boo
 $hasTypeTable = sqlite_table_exists($pdo, 'type');
 $hasMessageTypeIdColumn = sqlite_has_column($pdo, 'message', 'type_id');
 $canJoinType = $hasTypeTable && $hasMessageTypeIdColumn;
+$messageTypes = [];
+if ($hasTypeTable) {
+    $messageTypes = $pdo->query('SELECT type_name FROM type ORDER BY id ASC')->fetchAll(PDO::FETCH_COLUMN);
+    $messageTypes = array_values(array_filter(array_map(static fn($value): string => trim((string)$value), $messageTypes), static fn(string $value): bool => $value !== ''));
+}
 $sql = <<<'SQL'
 SELECT
     m.id,
@@ -245,6 +255,7 @@ foreach ($messages as $index => $message) {
     $messages[$index]['attachments'] = parse_attachments_from_body($rawBody);
     $messages[$index]['reply_to_message_id'] = normalize_message_id((string)(parse_reply_to_message_id($rawBody) ?? ''));
     $messages[$index]['body_for_display'] = sanitize_message_body_for_display($rawBody);
+    $messages[$index]['resolved_type_name'] = resolve_message_type_label($messages[$index]);
 }
 
 if ($selectedTarget !== '') {
@@ -259,6 +270,88 @@ if ($selectedTarget !== '') {
         return $targetType === 'user' && is_array($targetAccountIds) && in_array($selectedTarget, $targetAccountIds, true);
     }));
 }
+if ($selectedTypes !== []) {
+    $messagesByMessageIdForTypeFilter = [];
+    foreach ($messages as $message) {
+        $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
+        if ($messageId !== '') {
+            $messagesByMessageIdForTypeFilter[$messageId] = $message;
+        }
+    }
+
+    $adjacency = [];
+    foreach ($messages as $message) {
+        $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
+        if ($messageId === '') {
+            continue;
+        }
+        if (!isset($adjacency[$messageId])) {
+            $adjacency[$messageId] = [];
+        }
+
+        $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
+        if ($replyToMessageId !== '' && isset($messagesByMessageIdForTypeFilter[$replyToMessageId])) {
+            $adjacency[$messageId][] = $replyToMessageId;
+            if (!isset($adjacency[$replyToMessageId])) {
+                $adjacency[$replyToMessageId] = [];
+            }
+            $adjacency[$replyToMessageId][] = $messageId;
+        }
+    }
+
+    $matchedIds = [];
+    $visited = [];
+    foreach (array_keys($adjacency) as $startMessageId) {
+        if (isset($visited[$startMessageId])) {
+            continue;
+        }
+
+        $stack = [$startMessageId];
+        $component = [];
+        $hasMatchedTypeInComponent = false;
+        while ($stack !== []) {
+            $currentId = array_pop($stack);
+            if ($currentId === null || isset($visited[$currentId])) {
+                continue;
+            }
+            $visited[$currentId] = true;
+            $component[] = $currentId;
+
+            $currentMessage = $messagesByMessageIdForTypeFilter[$currentId] ?? null;
+            if (is_array($currentMessage)) {
+                $typeName = trim((string)($currentMessage['resolved_type_name'] ?? ''));
+                if ($typeName !== '' && in_array($typeName, $selectedTypes, true)) {
+                    $hasMatchedTypeInComponent = true;
+                }
+            }
+
+            foreach ($adjacency[$currentId] as $nextId) {
+                if (!isset($visited[$nextId])) {
+                    $stack[] = $nextId;
+                }
+            }
+        }
+
+        if ($hasMatchedTypeInComponent) {
+            foreach ($component as $componentMessageId) {
+                $matchedIds[$componentMessageId] = true;
+            }
+        }
+    }
+
+    $messages = array_values(array_filter($messages, static function (array $message) use ($matchedIds): bool {
+        $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
+        return $messageId !== '' && isset($matchedIds[$messageId]);
+    }));
+}
+
+$resolvedTypeNames = array_values(array_unique(array_map(static fn(array $message): string => trim((string)($message['resolved_type_name'] ?? '不明')), $messages)));
+$resolvedTypeNames = array_values(array_filter($resolvedTypeNames, static fn(string $value): bool => $value !== ''));
+if (!in_array('不明', $resolvedTypeNames, true)) {
+    $resolvedTypeNames[] = '不明';
+}
+$messageTypes = array_values(array_unique(array_merge($messageTypes, $resolvedTypeNames, $selectedTypes)));
+
 
 $totalCount = count($messages);
 $totalPages = max(1, (int)ceil($totalCount / $perPage));
@@ -361,10 +454,21 @@ function build_query(array $overrides = []): string
         'q' => trim((string)($_GET['q'] ?? '')),
         'room_id' => trim((string)($_GET['room_id'] ?? '')),
         'target' => trim((string)($_GET['target'] ?? '')),
+        'type' => $_GET['type'] ?? [],
         'page' => (string)max(1, (int)($_GET['page'] ?? 1)),
     ];
 
     foreach ($overrides as $key => $value) {
+        if ($key === 'type') {
+            if (is_array($value)) {
+                $params[$key] = $value;
+            } elseif ($value === null) {
+                $params[$key] = [];
+            } else {
+                $params[$key] = [(string)$value];
+            }
+            continue;
+        }
         $params[$key] = (string)$value;
     }
 
@@ -372,7 +476,21 @@ function build_query(array $overrides = []): string
         unset($params['page']);
     }
 
-    return http_build_query(array_filter($params, static fn(string $value): bool => $value !== ''));
+    $filtered = [];
+    foreach ($params as $key => $value) {
+        if ($key === 'type') {
+            if (is_array($value) && $value !== []) {
+                $filtered[$key] = array_values(array_filter(array_map(static fn($item): string => trim((string)$item), $value), static fn(string $item): bool => $item !== ''));
+            }
+            continue;
+        }
+
+        if ((string)$value !== '') {
+            $filtered[$key] = (string)$value;
+        }
+    }
+
+    return http_build_query($filtered);
 }
 
 include __DIR__ . '/header.php';
@@ -380,9 +498,9 @@ include __DIR__ . '/header.php';
 
 <section class="card glass form-card">
   <h2>メッセージ検索</h2>
-  <form method="get" class="admin-form horizontal-form search-row">
+  <form method="get" class="admin-form horizontal-form search-row" data-search-form>
     <label>テキスト検索
-      <input type="text" name="q" value="<?php echo htmlspecialchars($q, ENT_QUOTES, 'UTF-8'); ?>" placeholder="bodyを検索">
+      <input type="text" name="q" value="<?php echo htmlspecialchars($q, ENT_QUOTES, 'UTF-8'); ?>" placeholder="bodyを検索" data-search-text-input>
     </label>
 
     <label>対象者検索
@@ -414,8 +532,33 @@ include __DIR__ . '/header.php';
         </div>
       </div>
     </label>
+    <div class="type-filter-wrap">
+      <strong>タイプ検索</strong>
+      <div class="type-filter-list" data-type-filter-list>
+        <?php foreach ($messageTypes as $typeName): ?>
+          <?php
+            $badgeClass = message_type_badge_class($typeName);
+            $isSelected = in_array($typeName, $selectedTypes, true);
+          ?>
+          <button
+            type="button"
+            class="type-filter-chip <?php echo $isSelected ? 'is-active' : ''; ?>"
+            data-type-toggle
+            data-type-name="<?php echo htmlspecialchars($typeName, ENT_QUOTES, 'UTF-8'); ?>"
+          >
+            <span class="message-type-badge <?php echo htmlspecialchars($badgeClass, ENT_QUOTES, 'UTF-8'); ?>">
+              <?php echo htmlspecialchars($typeName, ENT_QUOTES, 'UTF-8'); ?>
+            </span>
+          </button>
+        <?php endforeach; ?>
+      </div>
+      <div data-type-hidden-container>
+        <?php foreach ($selectedTypes as $selectedType): ?>
+          <input type="hidden" name="type[]" value="<?php echo htmlspecialchars($selectedType, ENT_QUOTES, 'UTF-8'); ?>">
+        <?php endforeach; ?>
+      </div>
+    </div>
     <input type="hidden" name="room_id" value="<?php echo htmlspecialchars($selectedRoomId, ENT_QUOTES, 'UTF-8'); ?>">
-    <button type="submit">検索</button>
   </form>
 
   <div class="icon-filter-row" aria-label="ルーム絞り込み">
