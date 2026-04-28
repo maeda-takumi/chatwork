@@ -1,7 +1,7 @@
 <?php
 declare(strict_types=1);
 
-const GEMINI_API_KEY = 'AIzaSyAFVTnrJn97x9FmS-qUK7fCDNnDIhL2cso';
+const GEMINI_API_KEY = 'AIzaSyAyWrNtfYH79UshNQ3MMZ8keExujG0vBy8';
 const GEMINI_MODEL = 'gemma-3-27b-it';
 const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
@@ -79,17 +79,21 @@ function callGeminiApi(string $prompt): ?array
         ],
         'generationConfig' => [
             'temperature' => 0.1,
-            'responseMimeType' => 'application/json',
         ],
     ];
-    $response = requestGeminiApi($url, $payload);
-    if ($response !== null) {
-        return $response;
+    if (supportsJsonMode(GEMINI_MODEL)) {
+        $payload['generationConfig']['responseMimeType'] = 'application/json';
     }
 
-    // gemma-3-27b-it など JSON mode 非対応モデル向けのフォールバック。
-    unset($payload['generationConfig']['responseMimeType']);
     return requestGeminiApi($url, $payload);
+}
+
+function supportsJsonMode(string $model): bool
+{
+    $normalized = strtolower(trim($model));
+
+    // 2026-04 時点で gemma 系は JSON mode 非対応のため除外する。
+    return str_starts_with($normalized, 'gemini');
 }
 
 function requestGeminiApi(string $url, array $payload): ?array
