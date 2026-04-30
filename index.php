@@ -174,6 +174,19 @@ function parse_reply_target_account_id(string $body): ?string
     return null;
 }
 
+function parse_quote_to_message_id(string $body): ?string
+{
+    if ($body === '') {
+        return null;
+    }
+
+    if (preg_match('/\[qtmeta[^\]]*\btime=([^\]\s]+)[^\]]*\]/i', $body, $matches) === 1) {
+        return trim((string)($matches[1] ?? '')) ?: null;
+    }
+
+    return null;
+}
+
 function normalize_message_id(string $messageId): string
 {
     $trimmed = trim($messageId);
@@ -198,6 +211,8 @@ function sanitize_message_body_for_display(string $body): string
     $cleaned = $body;
     $patterns = [
         '/^\[rp[^\]]*\]/i',
+        '/^\[qt\]\s*\[qtmeta[^\]]*\]\s*/i',
+        '/\s*\[\/qt\]\s*$/i',
         '/\[toall\]/i',
         '/\[to[:：]\s*[^\]\s]+\][^\r\n]*(?:\r?\n)?/i',
         '/\[download:\d+\].*?\[\/download\]/is',
@@ -254,6 +269,7 @@ foreach ($messages as $index => $message) {
     $messages[$index]['target_account_ids'] = $target['account_ids'];
     $messages[$index]['attachments'] = parse_attachments_from_body($rawBody);
     $messages[$index]['reply_to_message_id'] = normalize_message_id((string)(parse_reply_to_message_id($rawBody) ?? ''));
+    $messages[$index]['quote_to_message_id'] = normalize_message_id((string)(parse_quote_to_message_id($rawBody) ?? ''));
     $messages[$index]['body_for_display'] = sanitize_message_body_for_display($rawBody);
     $messages[$index]['resolved_type_name'] = resolve_message_type_label($messages[$index]);
 }
@@ -651,6 +667,16 @@ include __DIR__ . '/header.php';
       $isReplyChild = (bool)($message['is_reply_child'] ?? false);
       $replyDepth = max(0, (int)($message['reply_depth'] ?? 0));
       $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
+      $quoteToMessageId = trim((string)($message['quote_to_message_id'] ?? ''));
+      $quotedMessage = ($quoteToMessageId !== '' && isset($messagesByMessageId[$quoteToMessageId])) ? $messagesByMessageId[$quoteToMessageId] : null;
+      $quotedBody = '';
+      if (is_array($quotedMessage)) {
+          $quotedBody = trim((string)($quotedMessage['body_for_display'] ?? $quotedMessage['body'] ?? ''));
+          if ($quotedBody !== '') {
+              $quotedBody = preg_replace("/\s+/", ' ', $quotedBody) ?? $quotedBody;
+              $quotedBody = mb_strimwidth($quotedBody, 0, 100, '…', 'UTF-8');
+          }
+      }
     ?>
     <div class="message-thread-item <?php echo $isReplyChild ? 'is-reply-child' : ''; ?>" style="--reply-level: <?php echo $replyDepth; ?>;">
       <?php if ($isReplyChild): ?>
@@ -696,6 +722,14 @@ include __DIR__ . '/header.php';
         </div>
         <?php if ($replyToMessageId !== ''): ?>
           <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
+        <?php endif; ?>
+        <?php if ($quoteToMessageId !== ''): ?>
+          <div class="quote-meta">
+            引用元 message_id: <?php echo htmlspecialchars($quoteToMessageId, ENT_QUOTES, 'UTF-8'); ?>
+            <?php if ($quotedBody !== ''): ?>
+              <div class="quote-preview"><?php echo htmlspecialchars($quotedBody, ENT_QUOTES, 'UTF-8'); ?></div>
+            <?php endif; ?>
+          </div>
         <?php endif; ?>
 
         <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>

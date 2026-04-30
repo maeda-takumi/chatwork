@@ -620,3 +620,18 @@ code {
   color: var(--muted);
   margin-bottom: .45rem;
 }
+
+.quote-meta {
+  font-size: .75rem;
+  color: var(--muted);
+  margin-bottom: .45rem;
+  padding: .4rem .55rem;
+  border-left: 3px solid rgba(255,255,255,.25);
+  background: rgba(255,255,255,.05);
+  border-radius: 8px;
+}
+
+.quote-preview {
+  margin-top: .25rem;
+  color: var(--text);
+}
