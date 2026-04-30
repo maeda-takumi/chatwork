@@ -332,13 +332,16 @@ code {
   position: relative;
 }
 .entity-chip-room {
-  background: rgba(59, 130, 246, .2);
-  border-color: rgba(96, 165, 250, .55);
+  background: rgba(255, 255, 255, .04);
+  border-color: rgba(255,255,255,.2);
+  padding: .22rem .45rem;
+  opacity: .86;
 }
 
 .entity-chip-sender {
-  background: rgba(16, 185, 129, .2);
-  border-color: rgba(52, 211, 153, .55);
+  background: rgba(255, 255, 255, .09);
+  border-color: rgba(255,255,255,.28);
+  padding: .28rem .52rem;
 }
 
 .entity-chip img {
@@ -353,6 +356,20 @@ code {
   color: var(--muted);
 }
 
+.entity-chip-room strong {
+  font-size: .72rem;
+  color: rgba(230, 236, 255, .78);
+}
+.entity-chip-room span {
+  font-size: .76rem;
+}
+.entity-chip-sender strong {
+  font-size: .76rem;
+  color: rgba(230, 236, 255, .95);
+}
+.entity-chip-sender span {
+  color: rgba(230, 236, 255, .92);
+}
 .entity-chip::after {
   content: attr(data-tooltip);
   position: absolute;
@@ -542,8 +559,18 @@ code {
 }
 
 .task-toggle {
-  padding: .35rem .7rem;
-  font-size: .78rem;
+  padding: .5rem .95rem;
+  font-size: .88rem;
+  font-weight: 700;
+}
+
+.message-datetime {
+  background: rgba(255,255,255,.08);
+  border: 1px solid rgba(255,255,255,.18);
+  color: rgba(230, 236, 255, .86);
+  font-size: .72rem;
+  font-weight: 500;
+  letter-spacing: .01em;
 }
 
 .pager {

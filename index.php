@@ -712,7 +712,7 @@ include __DIR__ . '/header.php';
             <span class="message-type-badge <?php echo htmlspecialchars($messageTypeBadgeClass, ENT_QUOTES, 'UTF-8'); ?>">
               <?php echo htmlspecialchars($messageTypeLabel, ENT_QUOTES, 'UTF-8'); ?>
             </span>
-            <span class="badge"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
+            <span class="badge message-datetime"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
             <button type="button" class="task-toggle" data-task-state="<?php echo $isTaskDone ? '1' : '0'; ?>"><?php echo $isTaskDone ? '取消' : '完了'; ?></button>
           </div>
         </div>
