@@ -105,7 +105,7 @@ FROM message m
 SQL;
 
 if ($canJoinType) {
-    $sql .= "LEFT JOIN type t ON m.type_id = t.id\n";
+    $sql .= "\nLEFT JOIN type t ON m.type_id = t.id\n";
 }
 try {
     $stmt = $pdo->query($sql);
