@@ -136,4 +136,65 @@ window.addEventListener('DOMContentLoaded', () => {
       }
     });
   });
+  const replyModal = document.querySelector('[data-reply-modal]');
+  const replyMeta = replyModal?.querySelector('[data-reply-meta]');
+  const replyBodyInput = replyModal?.querySelector('[data-reply-body]');
+  const replySubmit = replyModal?.querySelector('[data-reply-submit]');
+  const replyState = { roomId: '', toMessageId: '', aid: '', senderLabel: '' };
+
+  const closeReplyModal = () => {
+    if (!replyModal) return;
+    replyModal.hidden = true;
+    if (replyBodyInput) replyBodyInput.value = '';
+  };
+
+  document.querySelectorAll('[data-reply-open]').forEach((button) => {
+    button.addEventListener('click', () => {
+      if (!replyModal) return;
+      replyState.roomId = button.getAttribute('data-room-id') || '';
+      replyState.toMessageId = button.getAttribute('data-to-message-id') || '';
+      replyState.aid = button.getAttribute('data-aid') || '';
+      replyState.senderLabel = button.getAttribute('data-sender-label') || '対象ユーザー';
+      if (replyMeta) {
+        replyMeta.textContent = `返信先: ${replyState.senderLabel} / message_id: ${replyState.toMessageId}`;
+      }
+      replyModal.hidden = false;
+      replyBodyInput?.focus();
+    });
+  });
+
+  replyModal?.querySelectorAll('[data-reply-close]').forEach((button) => {
+    button.addEventListener('click', closeReplyModal);
+  });
+
+  replySubmit?.addEventListener('click', async () => {
+    const body = replyBodyInput?.value.trim() || '';
+    if (!body) {
+      alert('返信内容を入力してください。');
+      return;
+    }
+    if (replySubmit.dataset.loading === '1') {
+      return;
+    }
+    replySubmit.dataset.loading = '1';
+    try {
+      const form = new URLSearchParams();
+      form.set('action', 'reply');
+      form.set('room_id', replyState.roomId);
+      form.set('to_message_id', replyState.toMessageId);
+      form.set('aid', replyState.aid);
+      form.set('body', body);
+      const res = await fetch('list.php', { method: 'POST', body: form });
+      const json = await res.json();
+      if (!res.ok || !json.ok) {
+        throw new Error(json.error || '返信に失敗しました。');
+      }
+      alert('返信を送信しました。');
+      closeReplyModal();
+    } catch (error) {
+      alert(error.message || '返信に失敗しました。');
+    } finally {
+      replySubmit.dataset.loading = '0';
+    }
+  });
 });
