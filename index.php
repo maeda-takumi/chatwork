@@ -61,7 +61,8 @@ function resolve_message_type_label(array $message): string
 
 $hasTypeTable = sqlite_table_exists($pdo, 'type');
 $hasMessageTypeIdColumn = sqlite_has_column($pdo, 'message', 'type_id');
-$hasMessageAccountIdColumnhasMessageAccountIdColumn = sqlite_has_column($pdo, 'message', 'account_id');
+$hasMessageAccountIdColumn = sqlite_has_column($pdo, 'message', 'account_id');
+$hasMessageBodyColumn = sqlite_has_column($pdo, 'message', 'body');
 $canJoinType = $hasTypeTable && $hasMessageTypeIdColumn;
 
 $sql = <<<'SQL'
@@ -74,9 +75,11 @@ if ($hasMessageAccountIdColumn) {
     $sql .= " NULL AS account_id,\n";
 }
 
-$sql .= <<<'SQL'
- m.body, COALESCE(m.task, 0) AS task,
-SQL;
+if ($hasMessageBodyColumn) {
+    $sql .= " m.body, COALESCE(m.task, 0) AS task,\n";
+} else {
+    $sql .= " NULL AS body, COALESCE(m.task, 0) AS task,\n";
+}
 
 if ($canJoinType) {
     $sql .= " m.type_id, t.type_name\n";
@@ -95,11 +98,11 @@ try {
     $stmt = $pdo->query($sql);
 } catch (PDOException $e) {
     $message = (string)$e->getMessage();
-    if (strpos($message, 'no such column: m.account_id') === false && strpos($message, 'no such column: m.type_id') === false) {
+    if (strpos($message, 'no such column: m.account_id') === false && strpos($message, 'no such column: m.type_id') === false && strpos($message, 'no such column: m.body') === false) {
         throw $e;
     }
 
-    $stmt = $pdo->query('SELECT NULL AS account_id, m.body, COALESCE(m.task, 0) AS task, NULL AS type_id, NULL AS type_name FROM message m');
+    $stmt = $pdo->query('SELECT NULL AS account_id, NULL AS body, COALESCE(m.task, 0) AS task, NULL AS type_id, NULL AS type_name FROM message m');
 }
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
