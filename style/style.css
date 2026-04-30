@@ -116,6 +116,9 @@ body {
   gap: .6rem;
   margin-bottom: .8rem;
 }
+h2{
+  margin: 0px;
+}
 .card-head h2 {
   margin: 0;
   font-size: 1rem;
@@ -157,8 +160,10 @@ body {
 }
 
 .admin-form {
-  display: grid;
+  display: flex;
+  flex-direction: column;
   gap: .7rem;
+  /* margin-top: 10px; */
 }
 
 .admin-form label {
@@ -221,10 +226,8 @@ code {
 }
 
 .horizontal-form {
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  align-items: end;
+  gap: .55rem;
 }
-
 .horizontal-form .form-actions {
   align-self: end;
 }
@@ -250,20 +253,59 @@ code {
 }
 
 .search-row {
-  margin-bottom: .9rem;
+  margin-bottom: .7rem;
+}
+
+.search-row label {
+  display: grid;
+  gap: .3rem;
+}
+
+.search-row input[type="text"] {
+  min-height: 36px;
+  min-width: 300px;
+}
+
+.search-actions {
+  display: flex;
+  align-items: end;
+}
+
+.search-reset-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 36px;
+  padding: .35rem .72rem;
+  border-radius: 999px;
+  text-decoration: none;
+  font-size: .78rem;
+  color: rgba(230, 236, 255, .95);
+  background: rgba(255,255,255,.06);
+  border: 1px solid rgba(255,255,255,.2);
+}
+.room-flex{
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.search-reset-button:hover {
+  border-color: rgba(139, 92, 246, .82);
+  background: rgba(139, 92, 246, .2);
 }
 .type-filter-wrap {
   display: grid;
   gap: .45rem;
 }
-.type-filter-wrap strong {
+.type-filter-wrap strong,
+.room-flex strong {
   font-size: .85rem;
   color: var(--muted);
 }
 .type-filter-list {
   display: flex;
   flex-wrap: wrap;
-  gap: .45rem;
+  gap: .35rem;
 }
 .type-filter-chip {
   background: rgba(255,255,255,.06);
@@ -313,12 +355,24 @@ code {
   border-color: rgba(139, 92, 246, .95);
   box-shadow: 0 0 0 2px rgba(139, 92, 246, .35);
 }
-
+.frame-row{
+  display: flex;
+  gap: 10px;
+  flex-direction: row;
+}
 .message-meta-row {
   display: flex;
   flex-wrap: wrap;
-  gap: .8rem;
-  margin-bottom: .8rem;
+  gap: .55rem;
+  margin-bottom: .75rem;
+}
+
+.target-chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: .5rem;
+  width: 100%;
+  padding-left: .2rem;
 }
 
 .entity-chip {
@@ -403,6 +457,7 @@ code {
 }
 .target-dropdown {
   position: relative;
+  min-width: 300px;
 }
 
 .target-dropdown-toggle {

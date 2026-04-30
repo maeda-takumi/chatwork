@@ -541,41 +541,42 @@ include __DIR__ . '/header.php';
 ?>
 
 <section class="card glass form-card">
-  <h2>メッセージ検索</h2>
   <form method="get" class="admin-form horizontal-form search-row" data-search-form>
-    <label>テキスト検索
-      <input type="text" name="q" value="<?php echo htmlspecialchars($q, ENT_QUOTES, 'UTF-8'); ?>" placeholder="bodyを検索" data-search-text-input>
-    </label>
+    <div class="frame-row">
+        <label>テキスト検索
+        <input type="text" name="q" value="<?php echo htmlspecialchars($q, ENT_QUOTES, 'UTF-8'); ?>" placeholder="bodyを検索" data-search-text-input>
+        </label>
 
-    <label>対象者検索
-      <input type="hidden" name="target" value="<?php echo htmlspecialchars($selectedTarget, ENT_QUOTES, 'UTF-8'); ?>" data-target-input>
-      <div class="target-dropdown" data-target-dropdown>
-        <button type="button" class="target-dropdown-toggle" data-target-toggle>
-          <img src="<?php echo htmlspecialchars($selectedTargetIcon, ENT_QUOTES, 'UTF-8'); ?>" alt="選択対象" onerror="this.onerror=null;this.src='img/noimage.png';">
-          <span><?php echo htmlspecialchars($selectedTargetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-        </button>
-        <div class="target-dropdown-menu" data-target-menu>
-          <button type="button" class="target-option" data-value="">
-            <img src="img/all.png" alt="対象指定なし">
-            <span>対象指定なし</span>
-          </button>
-          <button type="button" class="target-option" data-value="__all__">
-            <img src="img/all.png" alt="全員">
-            <span>全員 ([toall])</span>
-          </button>
-          <?php foreach ($users as $user): ?>
-            <?php
-              $icon = trim((string)($user['user_icon'] ?? '')) ?: 'img/noimage.png';
-              $name = trim((string)($user['user_name'] ?? '')) ?: ('account_id: ' . (string)$user['account_id']);
-            ?>
-            <button type="button" class="target-option" data-value="<?php echo htmlspecialchars((string)$user['account_id'], ENT_QUOTES, 'UTF-8'); ?>">
-              <img src="<?php echo htmlspecialchars($icon, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-              <span><?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?></span>
+        <label>対象者検索
+        <input type="hidden" name="target" value="<?php echo htmlspecialchars($selectedTarget, ENT_QUOTES, 'UTF-8'); ?>" data-target-input>
+        <div class="target-dropdown" data-target-dropdown>
+            <button type="button" class="target-dropdown-toggle" data-target-toggle>
+            <img src="<?php echo htmlspecialchars($selectedTargetIcon, ENT_QUOTES, 'UTF-8'); ?>" alt="選択対象" onerror="this.onerror=null;this.src='img/noimage.png';">
+            <span><?php echo htmlspecialchars($selectedTargetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
             </button>
-          <?php endforeach; ?>
+            <div class="target-dropdown-menu" data-target-menu>
+            <button type="button" class="target-option" data-value="">
+                <img src="img/all.png" alt="対象指定なし">
+                <span>対象指定なし</span>
+            </button>
+            <button type="button" class="target-option" data-value="__all__">
+                <img src="img/all.png" alt="全員">
+                <span>全員 ([toall])</span>
+            </button>
+            <?php foreach ($users as $user): ?>
+                <?php
+                $icon = trim((string)($user['user_icon'] ?? '')) ?: 'img/noimage.png';
+                $name = trim((string)($user['user_name'] ?? '')) ?: ('account_id: ' . (string)$user['account_id']);
+                ?>
+                <button type="button" class="target-option" data-value="<?php echo htmlspecialchars((string)$user['account_id'], ENT_QUOTES, 'UTF-8'); ?>">
+                <img src="<?php echo htmlspecialchars($icon, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+                <span><?php echo htmlspecialchars($name, ENT_QUOTES, 'UTF-8'); ?></span>
+                </button>
+            <?php endforeach; ?>
+            </div>
         </div>
-      </div>
-    </label>
+        </label>
+    </div>
     <div class="type-filter-wrap">
       <strong>タイプ検索</strong>
       <div class="type-filter-list" data-type-filter-list>
@@ -602,28 +603,34 @@ include __DIR__ . '/header.php';
         <?php endforeach; ?>
       </div>
     </div>
+    <!-- <div class="search-actions">
+      <a href="index.php?<?php echo htmlspecialchars(build_query(['room_id' => $selectedRoomId, 'q' => '', 'target' => '', 'type' => [], 'page' => '1']), ENT_QUOTES, 'UTF-8'); ?>" class="search-reset-button">検索条件をリセット</a>
+    </div> -->
     <input type="hidden" name="room_id" value="<?php echo htmlspecialchars($selectedRoomId, ENT_QUOTES, 'UTF-8'); ?>">
   </form>
-
-  <div class="icon-filter-row" aria-label="ルーム絞り込み">
-    <a href="index.php?<?php echo htmlspecialchars(build_query(['room_id' => '', 'page' => '1']), ENT_QUOTES, 'UTF-8'); ?>" class="icon-filter-button <?php echo $selectedRoomId === '' ? 'active' : ''; ?>" title="すべて表示">
-      すべて
-    </a>
-    <?php foreach ($rooms as $room): ?>
-      <?php
-        $roomId = (string)$room['room_id'];
-        $roomName = (string)$room['room_name'];
-        $iconPath = trim((string)($room['room_icon'] ?? ''));
-      ?>
-      <a
-        href="index.php?<?php echo htmlspecialchars(build_query(['room_id' => $roomId, 'page' => '1']), ENT_QUOTES, 'UTF-8'); ?>"
-        class="icon-filter-button <?php echo $selectedRoomId === $roomId ? 'active' : ''; ?>"
-        title="<?php echo htmlspecialchars($roomName, ENT_QUOTES, 'UTF-8'); ?>"
-      >
-        <img src="<?php echo htmlspecialchars($iconPath !== '' ? $iconPath : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($roomName, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-      </a>
-    <?php endforeach; ?>
-  </div>
+    <div class="room-flex">
+        <strong>ルーム検索</strong>
+        <div class="icon-filter-row" aria-label="ルーム絞り込み">
+            
+            <a href="index.php?<?php echo htmlspecialchars(build_query(['room_id' => '', 'page' => '1']), ENT_QUOTES, 'UTF-8'); ?>" class="icon-filter-button <?php echo $selectedRoomId === '' ? 'active' : ''; ?>" title="すべて表示">
+            すべて
+            </a>
+            <?php foreach ($rooms as $room): ?>
+            <?php
+                $roomId = (string)$room['room_id'];
+                $roomName = (string)$room['room_name'];
+                $iconPath = trim((string)($room['room_icon'] ?? ''));
+            ?>
+            <a
+                href="index.php?<?php echo htmlspecialchars(build_query(['room_id' => $roomId, 'page' => '1']), ENT_QUOTES, 'UTF-8'); ?>"
+                class="icon-filter-button <?php echo $selectedRoomId === $roomId ? 'active' : ''; ?>"
+                title="<?php echo htmlspecialchars($roomName, ENT_QUOTES, 'UTF-8'); ?>"
+            >
+                <img src="<?php echo htmlspecialchars($iconPath !== '' ? $iconPath : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($roomName, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+            </a>
+            <?php endforeach; ?>
+        </div>
+    </div>
 </section>
 
 <section class="cards" aria-label="メッセージ一覧">
@@ -729,18 +736,19 @@ include __DIR__ . '/header.php';
             <img src="<?php echo htmlspecialchars($senderIcon !== '' ? $senderIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
             <span><?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?></span>
           </div>
-
-          <?php foreach ($targetEntries as $targetEntry): ?>
-            <?php
-              $targetLabel = (string)($targetEntry['label'] ?? '対象者なし');
-              $targetIcon = trim((string)($targetEntry['icon'] ?? ''));
-            ?>
-            <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
-              <strong>対象者</strong>
-              <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
-              <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
-            </div>
-          <?php endforeach; ?>
+          <div class="target-chip-row">
+            <?php foreach ($targetEntries as $targetEntry): ?>
+              <?php
+                $targetLabel = (string)($targetEntry['label'] ?? '対象者なし');
+                $targetIcon = trim((string)($targetEntry['icon'] ?? ''));
+              ?>
+              <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>">
+                <strong>対象者</strong>
+                <img src="<?php echo htmlspecialchars($targetIcon !== '' ? $targetIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
+                <span><?php echo htmlspecialchars($targetLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+              </div>
+            <?php endforeach; ?>
+          </div>
         </div>
         <?php if ($replyToMessageId !== ''): ?>
           <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
