@@ -743,6 +743,28 @@ code {
   gap: 1rem;
 }
 .dashboard-card h2 { margin: 0; }
+.dashboard-card {
+  position: relative;
+}
+.dashboard-star-form {
+  position: absolute;
+  top: .6rem;
+  right: .6rem;
+}
+.dashboard-star-button {
+  border: 1px solid rgba(255,255,255,.28);
+  border-radius: 999px;
+  background: rgba(255,255,255,.08);
+  color: #ffd54f;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  font-size: 1.05rem;
+  line-height: 1;
+}
+.dashboard-star-button:hover {
+  background: rgba(255, 213, 79, .2);
+}
 .dashboard-user-head {
   display: flex;
   gap: .7rem;

@@ -3,6 +3,17 @@ require_once __DIR__ . '/db.php';
 
 $pdo = get_db();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $accountId = trim((string)($_POST['account_id'] ?? ''));
+    if ($accountId !== '' && sqlite_has_column($pdo, 'users', 'star')) {
+        $updateStmt = $pdo->prepare('UPDATE users SET star = 1 WHERE account_id = :account_id');
+        $updateStmt->execute([':account_id' => $accountId]);
+    }
+
+    header('Location: index.php');
+    exit;
+}
+
 $hasUsersStarColumn = sqlite_has_column($pdo, 'users', 'star');
 $userSql = 'SELECT account_id, user_name, user_icon' . ($hasUsersStarColumn ? ', COALESCE(star, 0) AS star' : ', 0 AS star')
     . ' FROM users ORDER BY ' . ($hasUsersStarColumn ? 'COALESCE(star, 0) DESC, ' : '') . 'user_name ASC';
@@ -186,6 +197,10 @@ include __DIR__ . '/header.php';
     ?>
     
     <article class="card glass dashboard-card">
+      <form method="post" class="dashboard-star-form">
+        <input type="hidden" name="account_id" value="<?php echo htmlspecialchars($accountId, ENT_QUOTES, 'UTF-8'); ?>">
+        <button type="submit" class="dashboard-star-button" aria-label="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>をスターにする">★</button>
+      </form>
       <div class="dashboard-user-head">
         <img src="<?php echo htmlspecialchars($userIcon, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
         <div>
