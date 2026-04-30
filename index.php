@@ -202,6 +202,32 @@ function normalize_message_id(string $messageId): string
     return $trimmed;
 }
 
+function parse_quote_preview_from_body(string $body): string
+{
+    if ($body === '') {
+        return '';
+    }
+
+    if (preg_match('/\[qt\](.*?)\[\/qt\]/is', $body, $matches) !== 1) {
+        return '';
+    }
+
+    $quoted = trim((string)($matches[1] ?? ''));
+    if ($quoted === '') {
+        return '';
+    }
+
+    $quoted = preg_replace('/^\[qtmeta[^\]]*\]\s*/i', '', $quoted) ?? $quoted;
+    $quoted = preg_replace('/\[\/?toall\]/i', '', $quoted) ?? $quoted;
+    $quoted = preg_replace('/\[to:[^\]]+\]/i', '', $quoted) ?? $quoted;
+    $quoted = preg_replace('/^\[rp[^\]]*\]\s*/im', '', $quoted) ?? $quoted;
+    $quoted = preg_replace('/\[(?:piconname|picon):[^\]]+\]/i', '', $quoted) ?? $quoted;
+    $quoted = preg_replace("/[ \t]+/", ' ', $quoted) ?? $quoted;
+    $quoted = preg_replace("/\n{3,}/", "\n\n", $quoted) ?? $quoted;
+
+    return trim($quoted);
+}
+
 function sanitize_message_body_for_display(string $body): string
 {
     if ($body === '') {
@@ -269,6 +295,7 @@ foreach ($messages as $index => $message) {
     $messages[$index]['attachments'] = parse_attachments_from_body($rawBody);
     $messages[$index]['reply_to_message_id'] = normalize_message_id((string)(parse_reply_to_message_id($rawBody) ?? ''));
     $messages[$index]['quote_to_message_id'] = normalize_message_id((string)(parse_quote_to_message_id($rawBody) ?? ''));
+    $messages[$index]['quote_preview'] = parse_quote_preview_from_body($rawBody);
     $messages[$index]['body_for_display'] = sanitize_message_body_for_display($rawBody);
     $messages[$index]['resolved_type_name'] = resolve_message_type_label($messages[$index]);
 }
@@ -666,17 +693,10 @@ include __DIR__ . '/header.php';
       $isReplyChild = (bool)($message['is_reply_child'] ?? false);
       $replyDepth = max(0, (int)($message['reply_depth'] ?? 0));
       $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
-      $quoteToMessageId = trim((string)($message['quote_to_message_id'] ?? ''));
-      $quotedMessage = ($quoteToMessageId !== '' && isset($messagesByMessageId[$quoteToMessageId])) ? $messagesByMessageId[$quoteToMessageId] : null;
-      $quotedBody = '';
-      $quotedLocalId = null;
-      if (is_array($quotedMessage)) {
-          $quotedLocalId = (int)($quotedMessage['id'] ?? 0);
-          $quotedBody = trim((string)($quotedMessage['body_for_display'] ?? $quotedMessage['body'] ?? ''));
-          if ($quotedBody !== '') {
-              $quotedBody = preg_replace("/\s+/", ' ', $quotedBody) ?? $quotedBody;
-              $quotedBody = mb_strimwidth($quotedBody, 0, 100, '…', 'UTF-8');
-          }
+      $quotePreview = trim((string)($message['quote_preview'] ?? ''));
+      if ($quotePreview !== '') {
+          $quotePreview = preg_replace("/\s+/", ' ', $quotePreview) ?? $quotePreview;
+          $quotePreview = mb_strimwidth($quotePreview, 0, 100, '…', 'UTF-8');
       }
     ?>
     <div class="message-thread-item <?php echo $isReplyChild ? 'is-reply-child' : ''; ?>" style="--reply-level: <?php echo $replyDepth; ?>;">
@@ -724,16 +744,11 @@ include __DIR__ . '/header.php';
         <?php if ($replyToMessageId !== ''): ?>
           <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
         <?php endif; ?>
-        <?php if ($quoteToMessageId !== ''): ?>
+        <?php if ($quotePreview !== ''): ?>
           <div class="quote-layout">
             <div class="quote-title">引用</div>
             <div class="quote-source">
-              <?php if ($quotedLocalId !== null && $quotedLocalId > 0): ?>
-                <div class="quote-meta">引用元 #<?php echo $quotedLocalId; ?></div>
-              <?php else: ?>
-                <div class="quote-meta">引用元 message_id: <?php echo htmlspecialchars($quoteToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
-              <?php endif; ?>
-              <div class="quote-preview"><?php echo htmlspecialchars($quotedBody !== '' ? $quotedBody : '（引用元メッセージの本文を取得できませんでした）', ENT_QUOTES, 'UTF-8'); ?></div>
+              <div class="quote-preview"><?php echo htmlspecialchars($quotePreview, ENT_QUOTES, 'UTF-8'); ?></div>
             </div>
             <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
           </div>
