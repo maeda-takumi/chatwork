@@ -211,9 +211,8 @@ function sanitize_message_body_for_display(string $body): string
     $cleaned = $body;
     $patterns = [
         '/^\[rp[^\]]*\]/i',
-        '/^\[qt\]\s*\[qtmeta[^\]]*\]\s*/i',
-        '/\s*\[\/qt\]\s*$/i',
         '/\[toall\]/i',
+        '/\[qt\]\s*\[qtmeta[^\]]*\].*?\[\/qt\]\s*/is',
         '/\[to[:：]\s*[^\]\s]+\][^\r\n]*(?:\r?\n)?/i',
         '/\[download:\d+\].*?\[\/download\]/is',
         '/\[info\]\s*\[title\]\s*\[dtext:file_uploaded\]\s*\[\/title\].*?\[\/info\]\s*/is',
@@ -724,15 +723,20 @@ include __DIR__ . '/header.php';
           <div class="reply-meta">返信先 message_id: <?php echo htmlspecialchars($replyToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
         <?php endif; ?>
         <?php if ($quoteToMessageId !== ''): ?>
-          <div class="quote-meta">
-            引用元 message_id: <?php echo htmlspecialchars($quoteToMessageId, ENT_QUOTES, 'UTF-8'); ?>
-            <?php if ($quotedBody !== ''): ?>
-              <div class="quote-preview"><?php echo htmlspecialchars($quotedBody, ENT_QUOTES, 'UTF-8'); ?></div>
-            <?php endif; ?>
+          <div class="quote-layout">
+            <div class="quote-title">引用</div>
+            <div class="quote-source">
+              <div class="quote-meta">引用元 message_id: <?php echo htmlspecialchars($quoteToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
+              <?php if ($quotedBody !== ''): ?>
+                <div class="quote-preview"><?php echo htmlspecialchars($quotedBody, ENT_QUOTES, 'UTF-8'); ?></div>
+              <?php endif; ?>
+            </div>
+            <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
           </div>
+        <?php else: ?>
+          <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
         <?php endif; ?>
 
-        <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
         <?php
           $attachments = is_array($message['attachments'] ?? null) ? $message['attachments'] : [];
           $downloadRoomId = (int)($message['room_id'] ?? 0);
