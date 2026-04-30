@@ -755,12 +755,18 @@ code {
   border: 1px solid rgba(255,255,255,.28);
   border-radius: 999px;
   background: rgba(255,255,255,.08);
-  color: #ffd54f;
+  color: #9ca3af;
   width: 34px;
   height: 34px;
   padding: 0;
   font-size: 1.05rem;
   line-height: 1;
+}
+.dashboard-star-button.is-starred {
+  color: #ffd54f;
+}
+.dashboard-star-button.is-unstarred {
+  color: #9ca3af;
 }
 .dashboard-star-button:hover {
   background: rgba(255, 213, 79, .2);

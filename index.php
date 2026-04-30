@@ -192,6 +192,7 @@ include __DIR__ . '/header.php';
       $accountId = normalize_account_id((string)($user['account_id'] ?? ''));
       $userName = trim((string)($user['user_name'] ?? '')) ?: ('account_id: ' . $accountId);
       $userIcon = trim((string)($user['user_icon'] ?? '')) ?: 'img/noimage.png';
+      $isStarred = (int)($user['star'] ?? 0) === 1;
       $stats = $typeStatsByUser[$accountId] ?? [];
       ksort($stats);
     ?>
@@ -199,7 +200,7 @@ include __DIR__ . '/header.php';
     <article class="card glass dashboard-card">
       <form method="post" class="dashboard-star-form">
         <input type="hidden" name="account_id" value="<?php echo htmlspecialchars($accountId, ENT_QUOTES, 'UTF-8'); ?>">
-        <button type="submit" class="dashboard-star-button" aria-label="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>をスターにする">★</button>
+        <button type="submit" class="dashboard-star-button <?php echo $isStarred ? 'is-starred' : 'is-unstarred'; ?>" aria-label="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>をスターにする">★</button>
       </form>
       <div class="dashboard-user-head">
         <img src="<?php echo htmlspecialchars($userIcon, ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($userName, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
