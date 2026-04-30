@@ -61,7 +61,7 @@ function resolve_message_type_label(array $message): string
 
 $hasTypeTable = sqlite_table_exists($pdo, 'type');
 $hasMessageTypeIdColumn = sqlite_has_column($pdo, 'message', 'type_id');
-$hasMessageAccountIdColumn = sqlite_has_column($pdo, 'message', 'account_id');
+$hasMessageAccountIdColumnhasMessageAccountIdColumn = sqlite_has_column($pdo, 'message', 'account_id');
 $canJoinType = $hasTypeTable && $hasMessageTypeIdColumn;
 
 $sql = <<<'SQL'
@@ -91,7 +91,16 @@ SQL;
 if ($canJoinType) {
     $sql .= "LEFT JOIN type t ON m.type_id = t.id\n";
 }
-$stmt = $pdo->query($sql);
+try {
+    $stmt = $pdo->query($sql);
+} catch (PDOException $e) {
+    $message = (string)$e->getMessage();
+    if (strpos($message, 'no such column: m.account_id') === false && strpos($message, 'no such column: m.type_id') === false) {
+        throw $e;
+    }
+
+    $stmt = $pdo->query('SELECT NULL AS account_id, m.body, COALESCE(m.task, 0) AS task, NULL AS type_id, NULL AS type_name FROM message m');
+}
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 
