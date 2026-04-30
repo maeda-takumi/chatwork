@@ -25,9 +25,9 @@ return [
     ],
     [
         'name' => 'testgroup',
-        'webhook_setting_id' => '37914',
+        'webhook_setting_id' => '38028',
         'room_id' => '407745157',
-        'token' => 'aBgH6ut/uM/NQ7ss9YIxs9hOxUYkMKkjQ0wcrSLq+AA=',
+        'token' => '+Vkx8/+pK3gHaeu5AfjTmjieHdnTaBvy4QikS8fsSwM=',
         'enabled' => true,
     ],
 ];
