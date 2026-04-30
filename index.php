@@ -6,7 +6,7 @@ $pdo = get_db();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $accountId = trim((string)($_POST['account_id'] ?? ''));
     if ($accountId !== '' && sqlite_has_column($pdo, 'users', 'star')) {
-        $updateStmt = $pdo->prepare('UPDATE users SET star = 1 WHERE account_id = :account_id');
+        $updateStmt = $pdo->prepare('UPDATE users SET star = CASE WHEN COALESCE(star, 0) = 1 THEN 0 ELSE 1 END WHERE account_id = :account_id');
         $updateStmt->execute([':account_id' => $accountId]);
     }
 
