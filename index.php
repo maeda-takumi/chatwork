@@ -102,11 +102,13 @@ $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
 function parse_targets_from_body(string $body): array
 {
-    if (preg_match('/\[toall\]/i', $body) === 1) {
+    $bodyWithoutQuote = preg_replace('/\[qt\].*?\[\/qt\]/is', '', $body) ?? $body;
+
+    if (preg_match('/\[toall\]/i', $bodyWithoutQuote) === 1) {
         return ['type' => 'all', 'account_ids' => []];
     }
 
-    if (preg_match_all('/\[to[:：]\s*([^\]\s]+)\]/i', $body, $matches) > 0) {
+    if (preg_match_all('/\[to[:：]\s*([^\]\s]+)\]/i', $bodyWithoutQuote, $matches) > 0) {
         $accountIds = array_values(array_unique(array_filter(array_map(static fn(string $value): string => trim($value), $matches[1] ?? []), static fn(string $value): bool => $value !== '')));
         return ['type' => 'user', 'account_ids' => $accountIds];
     }
@@ -696,7 +698,6 @@ include __DIR__ . '/header.php';
       $quotePreview = trim((string)($message['quote_preview'] ?? ''));
       if ($quotePreview !== '') {
           $quotePreview = preg_replace("/\s+/", ' ', $quotePreview) ?? $quotePreview;
-          $quotePreview = mb_strimwidth($quotePreview, 0, 100, '…', 'UTF-8');
       }
     ?>
     <div class="message-thread-item <?php echo $isReplyChild ? 'is-reply-child' : ''; ?>" style="--reply-level: <?php echo $replyDepth; ?>;">
@@ -717,13 +718,13 @@ include __DIR__ . '/header.php';
         </div>
         <div class="message-meta-row">
 
-          <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>">
+          <div class="entity-chip entity-chip-room" data-tooltip="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>">
             <strong>ルーム情報</strong>
             <img src="<?php echo htmlspecialchars($roomIcon !== '' ? $roomIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
             
             <span><?php echo htmlspecialchars($roomLabel, ENT_QUOTES, 'UTF-8'); ?></span>
           </div>
-          <div class="entity-chip" data-tooltip="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>">
+          <div class="entity-chip entity-chip-sender" data-tooltip="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>">
             <strong>送信者</strong>
             <img src="<?php echo htmlspecialchars($senderIcon !== '' ? $senderIcon : 'img/noimage.png', ENT_QUOTES, 'UTF-8'); ?>" alt="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>" onerror="this.onerror=null;this.src='img/noimage.png';">
             <span><?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?></span>

@@ -331,6 +331,15 @@ code {
   border: 1px solid rgba(255,255,255,.15);
   position: relative;
 }
+.entity-chip-room {
+  background: rgba(59, 130, 246, .2);
+  border-color: rgba(96, 165, 250, .55);
+}
+
+.entity-chip-sender {
+  background: rgba(16, 185, 129, .2);
+  border-color: rgba(52, 211, 153, .55);
+}
 
 .entity-chip img {
   width: 30px;
@@ -634,4 +643,15 @@ code {
 .quote-preview {
   margin-top: .25rem;
   color: var(--text);
+
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.quote-layout .quote-source {
+  margin-bottom: .6rem;
+  padding: .65rem .75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255,255,255,.22);
+  background: rgba(15, 23, 42, .55);
 }
