@@ -27,7 +27,8 @@ if (!headers_sent()) {
         <h1>ChatSave</h1>
       </div>
       <nav class="header-nav" aria-label="メインナビゲーション">
-        <a href="index.php">ホーム</a>
+        <a href="index.php">ダッシュボード</a>
+        <a href="list.php">一覧</a>
         <a href="users.php">ユーザ追加</a>
         <a href="rooms.php">ルーム追加</a>
         <!-- <a href="attachments.php">添付一覧</a> -->
