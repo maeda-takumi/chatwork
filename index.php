@@ -53,6 +53,19 @@ function parse_reply_target_account_id(string $body): ?string
     return null;
 }
 
+function normalize_account_id(string $accountId): string
+{
+    $normalized = trim($accountId);
+    if ($normalized === '') {
+        return '';
+    }
+
+    if (preg_match('/^\d+$/', $normalized) === 1) {
+        return ltrim($normalized, '0') ?: '0';
+    }
+
+    return $normalized;
+}
 function resolve_message_type_label(array $message): string
 {
     $typeName = trim((string)($message['type_name'] ?? ''));
@@ -110,7 +123,7 @@ $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 $typeStatsByUser = [];
 
 foreach ($users as $user) {
-    $accountId = (string)($user['account_id'] ?? '');
+    $accountId = normalize_account_id((string)($user['account_id'] ?? ''));
     if ($accountId === '') {
         continue;
     }
@@ -125,6 +138,7 @@ foreach ($messages as $message) {
         $target = ['type' => 'user', 'account_ids' => [$replyAid]];
     }
 
+    $target['account_ids'] = array_values(array_unique(array_filter(array_map('normalize_account_id', $target['account_ids'] ?? []), static fn(string $value): bool => $value !== '')));
     if ($target['type'] !== 'user') {
         continue;
     }
@@ -161,7 +175,7 @@ include __DIR__ . '/header.php';
   <?php foreach ($users as $user): ?>
     <?php
     
-      $accountId = (string)($user['account_id'] ?? '');
+      $accountId = normalize_account_id((string)($user['account_id'] ?? ''));
       $userName = trim((string)($user['user_name'] ?? '')) ?: ('account_id: ' . $accountId);
       $userIcon = trim((string)($user['user_icon'] ?? '')) ?: 'img/noimage.png';
       $stats = $typeStatsByUser[$accountId] ?? [];
