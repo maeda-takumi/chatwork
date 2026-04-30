@@ -669,7 +669,9 @@ include __DIR__ . '/header.php';
       $quoteToMessageId = trim((string)($message['quote_to_message_id'] ?? ''));
       $quotedMessage = ($quoteToMessageId !== '' && isset($messagesByMessageId[$quoteToMessageId])) ? $messagesByMessageId[$quoteToMessageId] : null;
       $quotedBody = '';
+      $quotedLocalId = null;
       if (is_array($quotedMessage)) {
+          $quotedLocalId = (int)($quotedMessage['id'] ?? 0);
           $quotedBody = trim((string)($quotedMessage['body_for_display'] ?? $quotedMessage['body'] ?? ''));
           if ($quotedBody !== '') {
               $quotedBody = preg_replace("/\s+/", ' ', $quotedBody) ?? $quotedBody;
@@ -726,10 +728,12 @@ include __DIR__ . '/header.php';
           <div class="quote-layout">
             <div class="quote-title">引用</div>
             <div class="quote-source">
-              <div class="quote-meta">引用元 message_id: <?php echo htmlspecialchars($quoteToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
-              <?php if ($quotedBody !== ''): ?>
-                <div class="quote-preview"><?php echo htmlspecialchars($quotedBody, ENT_QUOTES, 'UTF-8'); ?></div>
+              <?php if ($quotedLocalId !== null && $quotedLocalId > 0): ?>
+                <div class="quote-meta">引用元 #<?php echo $quotedLocalId; ?></div>
+              <?php else: ?>
+                <div class="quote-meta">引用元 message_id: <?php echo htmlspecialchars($quoteToMessageId, ENT_QUOTES, 'UTF-8'); ?></div>
               <?php endif; ?>
+              <div class="quote-preview"><?php echo htmlspecialchars($quotedBody !== '' ? $quotedBody : '（引用元メッセージの本文を取得できませんでした）', ENT_QUOTES, 'UTF-8'); ?></div>
             </div>
             <div class="message-body"><?php echo nl2br(htmlspecialchars((string)($message['body_for_display'] ?? $message['body'] ?? ''), ENT_QUOTES, 'UTF-8')); ?></div>
           </div>
