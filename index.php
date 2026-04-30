@@ -3,7 +3,10 @@ require_once __DIR__ . '/db.php';
 
 $pdo = get_db();
 
-$users = $pdo->query('SELECT account_id, user_name, user_icon FROM users ORDER BY user_name ASC')->fetchAll(PDO::FETCH_ASSOC);
+$hasUsersStarColumn = sqlite_has_column($pdo, 'users', 'star');
+$userSql = 'SELECT account_id, user_name, user_icon' . ($hasUsersStarColumn ? ', COALESCE(star, 0) AS star' : ', 0 AS star')
+    . ' FROM users ORDER BY ' . ($hasUsersStarColumn ? 'COALESCE(star, 0) DESC, ' : '') . 'user_name ASC';
+$users = $pdo->query($userSql)->fetchAll(PDO::FETCH_ASSOC);
 function sqlite_table_exists(PDO $pdo, string $tableName): bool
 {
     $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = :table_name LIMIT 1");

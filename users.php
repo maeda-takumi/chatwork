@@ -4,6 +4,20 @@ require_once __DIR__ . '/db.php';
 $pdo = get_db();
 $error = '';
 
+function users_has_star_column(PDO $pdo): bool
+{
+    $columns = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($columns as $column) {
+        if ((string)($column['name'] ?? '') === 'star') {
+            return true;
+        }
+    }
+
+    return false;
+}
+
+$hasStarColumn = users_has_star_column($pdo);
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = $_POST['action'] ?? '';
 
@@ -12,13 +26,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userName = trim($_POST['user_name'] ?? '');
             $accountId = trim($_POST['account_id'] ?? '');
             $userIcon = trim($_POST['user_icon'] ?? '');
+            $star = isset($_POST['star']) && (string)$_POST['star'] === '1' ? 1 : 0;
 
             if ($userName === '' || $accountId === '') {
                 throw new RuntimeException('ユーザ名とaccount_idは必須です。');
             }
 
-            $stmt = $pdo->prepare('INSERT INTO users (user_name, account_id, user_icon) VALUES (?, ?, ?)');
-            $stmt->execute([$userName, $accountId, $userIcon]);
+            if ($hasStarColumn) {
+                $stmt = $pdo->prepare('INSERT INTO users (user_name, account_id, user_icon, star) VALUES (?, ?, ?, ?)');
+                $stmt->execute([$userName, $accountId, $userIcon, $star]);
+            } else {
+                $stmt = $pdo->prepare('INSERT INTO users (user_name, account_id, user_icon) VALUES (?, ?, ?)');
+                $stmt->execute([$userName, $accountId, $userIcon]);
+            }
         }
 
         if ($action === 'update') {
@@ -26,13 +46,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $userName = trim($_POST['user_name'] ?? '');
             $accountId = trim($_POST['account_id'] ?? '');
             $userIcon = trim($_POST['user_icon'] ?? '');
+            $star = isset($_POST['star']) && (string)$_POST['star'] === '1' ? 1 : 0;
 
             if ($id <= 0 || $userName === '' || $accountId === '') {
                 throw new RuntimeException('更新に必要な値が不足しています。');
             }
 
-            $stmt = $pdo->prepare('UPDATE users SET user_name = ?, account_id = ?, user_icon = ? WHERE id = ?');
-            $stmt->execute([$userName, $accountId, $userIcon, $id]);
+            if ($hasStarColumn) {
+                $stmt = $pdo->prepare('UPDATE users SET user_name = ?, account_id = ?, user_icon = ?, star = ? WHERE id = ?');
+                $stmt->execute([$userName, $accountId, $userIcon, $star, $id]);
+            } else {
+                $stmt = $pdo->prepare('UPDATE users SET user_name = ?, account_id = ?, user_icon = ? WHERE id = ?');
+                $stmt->execute([$userName, $accountId, $userIcon, $id]);
+            }
         }
 
         if ($action === 'delete') {
@@ -51,7 +77,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $users = $pdo->query('SELECT id, user_name, account_id, user_icon FROM users ORDER BY id DESC')->fetchAll(PDO::FETCH_ASSOC);
-
+$userSql = 'SELECT id, user_name, account_id, user_icon' . ($hasStarColumn ? ', COALESCE(star, 0) AS star' : ', 0 AS star') . ' FROM users ORDER BY id DESC';
+$users = $pdo->query($userSql)->fetchAll(PDO::FETCH_ASSOC);
 include __DIR__ . '/header.php';
 ?>
 
@@ -65,6 +92,12 @@ include __DIR__ . '/header.php';
     <label>ユーザ名<input type="text" name="user_name" required></label>
     <label>account_id<input type="text" name="account_id" required></label>
     <label>アイコンパス<input type="text" name="user_icon" placeholder="img/user.png"></label>
+    <label>優先表示
+      <select name="star">
+        <option value="0">通常</option>
+        <option value="1">優先</option>
+      </select>
+    </label>
     <button type="submit">追加</button>
   </form>
 </section>
@@ -88,6 +121,12 @@ include __DIR__ . '/header.php';
           <label>ユーザ名<input type="text" name="user_name" value="<?php echo htmlspecialchars($user['user_name'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
           <label>account_id<input type="text" name="account_id" value="<?php echo htmlspecialchars($user['account_id'], ENT_QUOTES, 'UTF-8'); ?>" required></label>
           <label>アイコンパス<input type="text" name="user_icon" value="<?php echo htmlspecialchars($user['user_icon'], ENT_QUOTES, 'UTF-8'); ?>"></label>
+          <label>優先表示
+            <select name="star">
+              <option value="0" <?php echo ((int)($user['star'] ?? 0) === 0) ? 'selected' : ''; ?>>通常</option>
+              <option value="1" <?php echo ((int)($user['star'] ?? 0) === 1) ? 'selected' : ''; ?>>優先</option>
+            </select>
+          </label>
           <div class="form-actions">
             <button type="submit">更新</button>
           </div>

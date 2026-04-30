@@ -57,6 +57,8 @@ function get_db(): PDO
 
     ensure_message_columns($pdo);
     
+    ensure_users_columns($pdo);
+
     return $pdo;
 }
 
@@ -93,6 +95,22 @@ function ensure_message_columns(PDO $pdo): void
     seed_message_types($pdo);
 }
 
+function ensure_users_columns(PDO $pdo): void
+{
+    $columns = $pdo->query('PRAGMA table_info(users)')->fetchAll(PDO::FETCH_ASSOC);
+    $hasStar = false;
+
+    foreach ($columns as $column) {
+        if ((string)($column['name'] ?? '') === 'star') {
+            $hasStar = true;
+            break;
+        }
+    }
+
+    if (!$hasStar) {
+        $pdo->exec('ALTER TABLE users ADD COLUMN star INTEGER NOT NULL DEFAULT 0');
+    }
+}
 function seed_message_types(PDO $pdo): void
 {
     $stmt = $pdo->prepare('INSERT OR IGNORE INTO type (type_name) VALUES (:type_name)');
