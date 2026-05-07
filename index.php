@@ -96,6 +96,8 @@ $sql = <<<'SQL'
 SELECT
 SQL;
 
+$sql .= " m.id,\n";
+
 if ($hasMessageAccountIdColumn) {
     $sql .= " m.account_id,\n";
 } else {
@@ -129,10 +131,25 @@ try {
         throw $e;
     }
 
-    $stmt = $pdo->query('SELECT NULL AS account_id, NULL AS body, COALESCE(m.task, 0) AS task, NULL AS type_id, NULL AS type_name FROM message m');
+    $stmt = $pdo->query('SELECT m.id, NULL AS account_id, NULL AS body, COALESCE(m.task, 0) AS task, NULL AS type_id, NULL AS type_name FROM message m');
 }
 $messages = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
+$messageUserDoneState = [];
+if (sqlite_table_exists($pdo, 'message_user_state')) {
+    $stateRows = $pdo->query('SELECT message_id, account_id, is_done FROM message_user_state')->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($stateRows as $stateRow) {
+        $messageDbId = (int)($stateRow['message_id'] ?? 0);
+        $stateAccountId = normalize_account_id((string)($stateRow['account_id'] ?? ''));
+        if ($messageDbId <= 0 || $stateAccountId === '') {
+            continue;
+        }
+        if (!isset($messageUserDoneState[$messageDbId])) {
+            $messageUserDoneState[$messageDbId] = [];
+        }
+        $messageUserDoneState[$messageDbId][$stateAccountId] = (int)($stateRow['is_done'] ?? 0) === 1;
+    }
+}
 
 $typeStatsByUser = [];
 
@@ -157,7 +174,7 @@ foreach ($messages as $message) {
         continue;
     }
     $typeName = resolve_message_type_label($message);
-    $isDone = (int)($message['task'] ?? 0) === 1;
+    $messageDbId = (int)($message['id'] ?? 0);
     foreach ($target['account_ids'] as $targetAccountId) {
         if (!isset($typeStatsByUser[$targetAccountId])) {
             continue;
@@ -166,6 +183,7 @@ foreach ($messages as $message) {
             $typeStatsByUser[$targetAccountId][$typeName] = ['open' => 0, 'done' => 0];
         }
 
+        $isDone = $messageUserDoneState[$messageDbId][$targetAccountId] ?? ((int)($message['task'] ?? 0) === 1);
         if ($isDone) {
             $typeStatsByUser[$targetAccountId][$typeName]['done']++;
         } else {

@@ -54,6 +54,8 @@ $pdo = get_db();
 $q = trim((string)($_GET['q'] ?? ''));
 $selectedRoomId = trim((string)($_GET['room_id'] ?? ''));
 $selectedTarget = trim((string)($_GET['target'] ?? ''));
+$selectedViewerAccountId = trim((string)($_GET['viewer_account_id'] ?? ''));
+$flaggedOnly = trim((string)($_GET['flagged'] ?? '')) === '1';
 $selectedTypes = $_GET['type'] ?? [];
 if (!is_array($selectedTypes)) {
     $selectedTypes = [$selectedTypes];
@@ -65,6 +67,9 @@ $perPage = 30;
 $rooms = $pdo->query('SELECT id, room_id, room_name, room_icon FROM room ORDER BY room_name ASC')->fetchAll(PDO::FETCH_ASSOC);
 
 $users = $pdo->query('SELECT account_id, user_name, user_icon FROM users ORDER BY user_name ASC')->fetchAll(PDO::FETCH_ASSOC);
+if ($selectedViewerAccountId === '' && isset($users[0])) {
+    $selectedViewerAccountId = trim((string)($users[0]['account_id'] ?? ''));
+}
 function sqlite_table_exists(PDO $pdo, string $tableName): bool
 {
     $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = :table_name LIMIT 1");
@@ -102,6 +107,8 @@ SELECT
     m.body,
     m.send_time,
     COALESCE(m.task, 0) AS task,
+    COALESCE(mus.is_flagged, 0) AS viewer_is_flagged,
+    COALESCE(mus.is_done, COALESCE(m.task, 0)) AS viewer_is_done,
 SQL;
 
 if ($canJoinType) {
@@ -124,6 +131,7 @@ $sql .= <<<'SQL'
 FROM message m
 LEFT JOIN room r ON CAST(m.room_id AS TEXT) = r.room_id
 LEFT JOIN users u ON m.account_id = u.account_id
+LEFT JOIN message_user_state mus ON mus.message_id = m.id AND mus.account_id = :viewer_account_id
 SQL;
 
 if ($canJoinType) {
@@ -134,7 +142,7 @@ $sql .= <<<'SQL'
 WHERE 1=1
 SQL;
 
-$params = [];
+$params = [':viewer_account_id' => $selectedViewerAccountId];
 if ($q !== '') {
     $sql .= ' AND m.body LIKE :q';
     $params[':q'] = '%' . $q . '%';
@@ -438,6 +446,56 @@ if ($selectedTypes !== []) {
     }));
 }
 
+if ($flaggedOnly) {
+    $messagesByMessageIdForFlagFilter = [];
+    foreach ($messages as $message) {
+        $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
+        if ($messageId !== '') {
+            $messagesByMessageIdForFlagFilter[$messageId] = $message;
+        }
+    }
+
+    $descendantsByParentMessageId = [];
+    foreach ($messages as $message) {
+        $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
+        $replyToMessageId = trim((string)($message['reply_to_message_id'] ?? ''));
+        if ($messageId === '' || $replyToMessageId === '' || !isset($messagesByMessageIdForFlagFilter[$replyToMessageId])) {
+            continue;
+        }
+
+        if (!isset($descendantsByParentMessageId[$replyToMessageId])) {
+            $descendantsByParentMessageId[$replyToMessageId] = [];
+        }
+        $descendantsByParentMessageId[$replyToMessageId][] = $messageId;
+    }
+
+    $matchedIds = [];
+    $stack = [];
+    foreach ($messages as $message) {
+        $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
+        if ($messageId === '' || (int)($message['viewer_is_flagged'] ?? 0) !== 1) {
+            continue;
+        }
+        $matchedIds[$messageId] = true;
+        $stack[] = $messageId;
+    }
+
+    while ($stack !== []) {
+        $parentMessageId = array_pop($stack);
+        foreach ($descendantsByParentMessageId[$parentMessageId] ?? [] as $childMessageId) {
+            if (isset($matchedIds[$childMessageId])) {
+                continue;
+            }
+            $matchedIds[$childMessageId] = true;
+            $stack[] = $childMessageId;
+        }
+    }
+
+    $messages = array_values(array_filter($messages, static function (array $message) use ($matchedIds): bool {
+        $messageId = normalize_message_id((string)($message['message_id'] ?? ''));
+        return $messageId !== '' && isset($matchedIds[$messageId]);
+    }));
+}
 $resolvedTypeNames = array_values(array_unique(array_map(static fn(array $message): string => trim((string)($message['resolved_type_name'] ?? '不明')), $messages)));
 $resolvedTypeNames = array_values(array_filter($resolvedTypeNames, static fn(string $value): bool => $value !== ''));
 if (!in_array('不明', $resolvedTypeNames, true)) {
@@ -540,6 +598,13 @@ if ($selectedTarget === '__all__') {
     $selectedTargetLabel = trim((string)$selectedTargetUser['user_name']) ?: ('account_id: ' . $selectedTarget);
     $selectedTargetIcon = trim((string)$selectedTargetUser['user_icon']) ?: 'img/noimage.png';
 }
+$selectedViewerUser = $selectedViewerAccountId !== '' ? ($targetUsersByAccountId[$selectedViewerAccountId] ?? null) : null;
+$selectedViewerLabel = '閲覧者未選択';
+if (is_array($selectedViewerUser)) {
+    $selectedViewerLabel = trim((string)($selectedViewerUser['user_name'] ?? '')) ?: ('account_id: ' . $selectedViewerAccountId);
+} elseif ($selectedViewerAccountId !== '') {
+    $selectedViewerLabel = 'account_id: ' . $selectedViewerAccountId;
+}
 
 function build_query(array $overrides = []): string
 {
@@ -547,6 +612,8 @@ function build_query(array $overrides = []): string
         'q' => trim((string)($_GET['q'] ?? '')),
         'room_id' => trim((string)($_GET['room_id'] ?? '')),
         'target' => trim((string)($_GET['target'] ?? '')),
+        'viewer_account_id' => trim((string)($_GET['viewer_account_id'] ?? '')),
+        'flagged' => trim((string)($_GET['flagged'] ?? '')),
         'type' => $_GET['type'] ?? [],
         'page' => (string)max(1, (int)($_GET['page'] ?? 1)),
     ];
@@ -625,6 +692,31 @@ include __DIR__ . '/header.php';
             </div>
         </div>
         </label>
+        <label>閲覧者
+          <select name="viewer_account_id" data-viewer-select>
+            <?php foreach ($users as $user): ?>
+              <?php
+                $viewerAccountId = (string)($user['account_id'] ?? '');
+                $viewerName = trim((string)($user['user_name'] ?? '')) ?: ('account_id: ' . $viewerAccountId);
+              ?>
+              <option value="<?php echo htmlspecialchars($viewerAccountId, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $selectedViewerAccountId === $viewerAccountId ? 'selected' : ''; ?>>
+                <?php echo htmlspecialchars($viewerName, ENT_QUOTES, 'UTF-8'); ?>
+              </option>
+            <?php endforeach; ?>
+          </select>
+        </label>
+        <label class="flagged-filter-label">
+          <input type="checkbox" name="flagged" value="1" <?php echo $flaggedOnly ? 'checked' : ''; ?> data-auto-submit>
+          フラグのみ（返信も表示）
+        </label>
+    </div>
+    <div class="viewer-status-bar">
+      <span>閲覧者: <?php echo htmlspecialchars($selectedViewerLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+      <?php if ($flaggedOnly): ?>
+        <a href="list.php?<?php echo htmlspecialchars(build_query(['flagged' => '', 'page' => '1']), ENT_QUOTES, 'UTF-8'); ?>">フラグ絞り込み解除</a>
+      <?php else: ?>
+        <a href="list.php?<?php echo htmlspecialchars(build_query(['flagged' => '1', 'page' => '1']), ENT_QUOTES, 'UTF-8'); ?>">この閲覧者のフラグを見る</a>
+      <?php endif; ?>
     </div>
     <div class="type-filter-wrap">
       <strong>タイプ検索</strong>
@@ -745,7 +837,8 @@ include __DIR__ . '/header.php';
       if ($timestamp !== false) {
           $formattedSendTime = date('Y/m/d H:i:s', $timestamp);
       }
-      $isTaskDone = (int)($message['task'] ?? 0) === 1;
+      $isTaskDone = (int)($message['viewer_is_done'] ?? $message['task'] ?? 0) === 1;
+      $isFlagged = (int)($message['viewer_is_flagged'] ?? 0) === 1;
       $messageTypeLabel = resolve_message_type_label($message);
       $messageTypeBadgeClass = message_type_badge_class($messageTypeLabel);
       $isReplyChild = (bool)($message['is_reply_child'] ?? false);
@@ -760,7 +853,7 @@ include __DIR__ . '/header.php';
       <?php if ($isReplyChild): ?>
         <div class="reply-branch-marker" aria-hidden="true"></div>
       <?php endif; ?>
-      <article class="card glass message-card <?php echo $isTaskDone ? 'is-complete' : ''; ?>" data-message-id="<?php echo (int)$message['id']; ?>">
+      <article class="card glass message-card <?php echo $isTaskDone ? 'is-complete' : ''; ?> <?php echo $isFlagged ? 'is-flagged' : ''; ?>" data-message-id="<?php echo (int)$message['id']; ?>" data-viewer-account-id="<?php echo htmlspecialchars($selectedViewerAccountId, ENT_QUOTES, 'UTF-8'); ?>">
         <img class="complete-stamp" src="img/complete.png" alt="完了" onerror="this.style.display='none';">
         <div class="card-head">
           <h2>#<?php echo (int)$message['id']; ?></h2>
@@ -769,6 +862,7 @@ include __DIR__ . '/header.php';
               <?php echo htmlspecialchars($messageTypeLabel, ENT_QUOTES, 'UTF-8'); ?>
             </span>
             <span class="badge message-datetime"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
+            <button type="button" class="flag-toggle" data-flag-state="<?php echo $isFlagged ? '1' : '0'; ?>"><?php echo $isFlagged ? '★ フラグ解除' : '☆ フラグ'; ?></button>
             <button type="button" class="task-toggle" data-task-state="<?php echo $isTaskDone ? '1' : '0'; ?>"><?php echo $isTaskDone ? '取消' : '完了'; ?></button>
 
           </div>

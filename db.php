@@ -59,6 +59,7 @@ function get_db(): PDO
     
     ensure_users_columns($pdo);
 
+    ensure_message_user_state_table($pdo);
     return $pdo;
 }
 
@@ -111,6 +112,26 @@ function ensure_users_columns(PDO $pdo): void
         $pdo->exec('ALTER TABLE users ADD COLUMN star INTEGER NOT NULL DEFAULT 0');
     }
 }
+function ensure_message_user_state_table(PDO $pdo): void
+{
+    $pdo->exec(
+        'CREATE TABLE IF NOT EXISTS message_user_state (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            message_id INTEGER NOT NULL,
+            account_id TEXT NOT NULL,
+            is_flagged INTEGER NOT NULL DEFAULT 0,
+            is_done INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(message_id, account_id)
+        )'
+    );
+
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_user_state_account_flagged ON message_user_state (account_id, is_flagged)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_user_state_account_done ON message_user_state (account_id, is_done)');
+    $pdo->exec('CREATE INDEX IF NOT EXISTS idx_message_user_state_message ON message_user_state (message_id)');
+}
+
 function seed_message_types(PDO $pdo): void
 {
     $stmt = $pdo->prepare('INSERT OR IGNORE INTO type (type_name) VALUES (:type_name)');

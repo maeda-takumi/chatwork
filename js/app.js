@@ -90,7 +90,54 @@ window.addEventListener('DOMContentLoaded', () => {
         submitSearchForm();
       });
     });
+    searchForm.querySelectorAll('[data-viewer-select], [data-auto-submit]').forEach((input) => {
+      input.addEventListener('change', () => {
+        submitSearchForm();
+      });
+    });
   }
+  document.querySelectorAll('.flag-toggle').forEach((button) => {
+    button.addEventListener('click', async () => {
+      const card = button.closest('.message-card');
+      if (!card || button.dataset.loading === '1') {
+        return;
+      }
+
+      const messageId = Number(card.dataset.messageId || '0');
+      const accountId = card.dataset.viewerAccountId || '';
+      if (!messageId || !accountId) {
+        alert('閲覧者を選択してからフラグを操作してください。');
+        return;
+      }
+
+      const currentFlagged = button.dataset.flagState === '1';
+      const nextFlagged = !currentFlagged;
+      button.dataset.loading = '1';
+
+      card.classList.toggle('is-flagged', nextFlagged);
+      button.textContent = nextFlagged ? '★ フラグ解除' : '☆ フラグ';
+      button.dataset.flagState = nextFlagged ? '1' : '0';
+
+      try {
+        const res = await fetch('message_flag_toggle.php', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: messageId, flagged: nextFlagged, account_id: accountId })
+        });
+
+        if (!res.ok) {
+          throw new Error('update failed');
+        }
+      } catch (error) {
+        card.classList.toggle('is-flagged', currentFlagged);
+        button.textContent = currentFlagged ? '★ フラグ解除' : '☆ フラグ';
+        button.dataset.flagState = currentFlagged ? '1' : '0';
+        alert('フラグ更新に失敗しました。時間をおいて再試行してください。');
+      } finally {
+        button.dataset.loading = '0';
+      }
+    });
+  });
   document.querySelectorAll('.task-toggle').forEach((button) => {
     button.addEventListener('click', async () => {
       const card = button.closest('.message-card');
@@ -116,7 +163,7 @@ window.addEventListener('DOMContentLoaded', () => {
         const res = await fetch('task_toggle.php', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ id: messageId, task: nextDone })
+          body: JSON.stringify({ id: messageId, task: nextDone, account_id: card.dataset.viewerAccountId || '' })
         });
 
         if (!res.ok) {

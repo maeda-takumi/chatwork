@@ -20,12 +20,12 @@ if (!is_array($payload)) {
 }
 
 $id = (int)($payload['id'] ?? 0);
-$task = (bool)($payload['task'] ?? false);
+$flagged = (bool)($payload['flagged'] ?? false);
 $accountId = trim((string)($payload['account_id'] ?? ''));
 
-if ($id <= 0) {
+if ($id <= 0 || $accountId === '') {
     http_response_code(422);
-    echo json_encode(['ok' => false, 'error' => 'invalid_id'], JSON_UNESCAPED_UNICODE);
+    echo json_encode(['ok' => false, 'error' => 'invalid_payload'], JSON_UNESCAPED_UNICODE);
     exit;
 }
 
@@ -38,39 +38,32 @@ if (!is_array($messageStmt->fetch(PDO::FETCH_ASSOC))) {
     exit;
 }
 
-if ($accountId !== '') {
-    $stmt = $pdo->prepare(
-        'UPDATE message_user_state
-         SET is_done = :is_done, updated_at = CURRENT_TIMESTAMP
-         WHERE message_id = :message_id AND account_id = :account_id'
+$stmt = $pdo->prepare(
+    'UPDATE message_user_state
+     SET is_flagged = :is_flagged, updated_at = CURRENT_TIMESTAMP
+     WHERE message_id = :message_id AND account_id = :account_id'
+);
+$stmt->execute([
+    ':message_id' => $id,
+    ':account_id' => $accountId,
+    ':is_flagged' => $flagged ? 1 : 0,
+]);
+
+if ($stmt->rowCount() === 0) {
+    $insertStmt = $pdo->prepare(
+        'INSERT OR IGNORE INTO message_user_state (message_id, account_id, is_flagged, updated_at)
+         VALUES (:message_id, :account_id, :is_flagged, CURRENT_TIMESTAMP)'
     );
-    $stmt->execute([
+    $insertStmt->execute([
         ':message_id' => $id,
         ':account_id' => $accountId,
-        ':is_done' => $task ? 1 : 0,
-    ]);
-
-    if ($stmt->rowCount() === 0) {
-        $insertStmt = $pdo->prepare(
-            'INSERT OR IGNORE INTO message_user_state (message_id, account_id, is_done, updated_at)
-             VALUES (:message_id, :account_id, :is_done, CURRENT_TIMESTAMP)'
-        );
-        $insertStmt->execute([
-            ':message_id' => $id,
-            ':account_id' => $accountId,
-            ':is_done' => $task ? 1 : 0,
-        ]);
-    }
-} else {
-    $stmt = $pdo->prepare('UPDATE message SET task = :task WHERE id = :id');
-    $stmt->execute([
-        ':task' => $task ? 1 : 0,
-        ':id' => $id,
+        ':is_flagged' => $flagged ? 1 : 0,
     ]);
 }
+
 echo json_encode([
     'ok' => true,
     'id' => $id,
     'account_id' => $accountId,
-    'task' => $task,
+    'flagged' => $flagged,
 ], JSON_UNESCAPED_UNICODE);
