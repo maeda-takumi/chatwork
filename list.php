@@ -50,37 +50,6 @@ function call_chatwork_messages_api(string $method, string $path, array $payload
     return $decoded;
 }
 
-if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (($_POST['action'] ?? '') === 'reply')) {
-    header('Content-Type: application/json; charset=UTF-8');
-    try {
-        $roomId = (int)($_POST['room_id'] ?? 0);
-        $toMessageId = trim((string)($_POST['to_message_id'] ?? ''));
-        $aid = trim((string)($_POST['aid'] ?? ''));
-        $body = trim((string)($_POST['body'] ?? ''));
-        if ($roomId <= 0 || $toMessageId === '' || $aid === '' || $body === '') {
-            throw new InvalidArgumentException('入力値が不足しています。');
-        }
-
-        $members = call_chatwork_messages_api('GET', '/rooms/' . $roomId . '/members');
-        $allMemberIds = [];
-        foreach (['admin_ids', 'member_ids', 'readonly_ids'] as $memberKey) {
-            foreach (($members[$memberKey] ?? []) as $memberId) {
-                $allMemberIds[(string)$memberId] = true;
-            }
-        }
-        if (!isset($allMemberIds[$aid])) {
-            throw new RuntimeException('返信先ユーザーが対象ルームに存在しないため返信できません。');
-        }
-
-        $replyBody = sprintf('[rp aid=%s to=%d-%s]%s', $aid, $roomId, $toMessageId, PHP_EOL . $body);
-        $created = call_chatwork_messages_api('POST', '/rooms/' . $roomId . '/messages', ['body' => $replyBody]);
-        echo json_encode(['ok' => true, 'message_id' => $created['message_id'] ?? null], JSON_UNESCAPED_UNICODE);
-    } catch (Throwable $e) {
-        http_response_code(400);
-        echo json_encode(['ok' => false, 'error' => $e->getMessage()], JSON_UNESCAPED_UNICODE);
-    }
-    exit;
-}
 $pdo = get_db();
 $q = trim((string)($_GET['q'] ?? ''));
 $selectedRoomId = trim((string)($_GET['room_id'] ?? ''));
@@ -801,15 +770,7 @@ include __DIR__ . '/header.php';
             </span>
             <span class="badge message-datetime"><?php echo htmlspecialchars($formattedSendTime, ENT_QUOTES, 'UTF-8'); ?></span>
             <button type="button" class="task-toggle" data-task-state="<?php echo $isTaskDone ? '1' : '0'; ?>"><?php echo $isTaskDone ? '取消' : '完了'; ?></button>
-            <button
-              type="button"
-              class="reply-open-button"
-              data-reply-open
-              data-room-id="<?php echo (int)$message['room_id']; ?>"
-              data-to-message-id="<?php echo htmlspecialchars((string)$message['message_id'], ENT_QUOTES, 'UTF-8'); ?>"
-              data-aid="<?php echo htmlspecialchars((string)$message['account_id'], ENT_QUOTES, 'UTF-8'); ?>"
-              data-sender-label="<?php echo htmlspecialchars($senderLabel, ENT_QUOTES, 'UTF-8'); ?>"
-            >返信</button>
+
           </div>
         </div>
         <div class="message-meta-row">
@@ -885,18 +846,6 @@ include __DIR__ . '/header.php';
   <?php endforeach; ?>
 </section>
 
-<div class="reply-modal" data-reply-modal hidden>
-  <div class="reply-modal-backdrop" data-reply-close></div>
-  <div class="reply-modal-panel glass">
-    <h3>返信メッセージ</h3>
-    <p class="reply-modal-meta" data-reply-meta></p>
-    <textarea rows="6" data-reply-body placeholder="返信内容を入力"></textarea>
-    <div class="reply-modal-actions">
-      <button type="button" class="reply-cancel" data-reply-close>閉じる</button>
-      <button type="button" data-reply-submit>送信</button>
-    </div>
-  </div>
-</div>
 
 <?php if ($totalPages > 1): ?>
   <nav class="pager" aria-label="ページャー">
