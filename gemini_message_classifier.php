@@ -6,6 +6,10 @@ const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
 const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 const GEMINI_ERROR_LOG_FILE = __DIR__ . '/webhook_error.log';
+const GEMINI_API_TIMEOUT_SECONDS = 20;
+const GEMINI_API_CONNECT_TIMEOUT_SECONDS = 5;
+const GEMINI_API_MAX_ATTEMPTS = 2;
+const GEMINI_API_RETRY_DELAY_MICROSECONDS = 250000;
 /**
  * メッセージ本文をタイプ名に分類する。
  * API呼び出しに失敗した場合は「不明」を返す。
@@ -134,26 +138,67 @@ function supportsJsonMode(string $model): bool
 
 function requestGeminiApi(string $url, array $payload): ?array
 {
-
-    $ch = curl_init($url);
-    if ($ch === false) {
-        logGeminiError('curl_init_failed', [
-            'url' => $url,
+    $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    if (!is_string($jsonPayload) || $jsonPayload === '') {
+        logGeminiError('gemini_api_payload_encode_failed', [
+            'url' => redactGeminiApiKeyFromUrl($url),
         ]);
         return null;
     }
-    $jsonPayload = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
-    if (!is_string($jsonPayload) || $jsonPayload === '') {
-        curl_close($ch);
-        return null;
+
+    $attempts = max(1, GEMINI_API_MAX_ATTEMPTS);
+    $lastFailure = null;
+    $completedAttempts = 0;
+
+    for ($attempt = 1; $attempt <= $attempts; $attempt++) {
+        $completedAttempts = $attempt;
+        $response = executeGeminiApiRequest($url, $jsonPayload);
+        if ($response['ok'] === true) {
+            return $response['decoded'];
+        }
+
+        $lastFailure = $response;
+        if ($attempt < $attempts && shouldRetryGeminiApiRequest($response)) {
+            usleep(GEMINI_API_RETRY_DELAY_MICROSECONDS);
+            continue;
+        }
+
+        break;
     }
 
+    logGeminiError((string)($lastFailure['error_code'] ?? 'gemini_api_request_failed'), [
+        'url' => redactGeminiApiKeyFromUrl($url),
+        'attempts' => $completedAttempts,
+        'status_code' => $lastFailure['status_code'] ?? 0,
+        'curl_errno' => $lastFailure['curl_errno'] ?? 0,
+        'curl_error' => $lastFailure['curl_error'] ?? '',
+        'response_excerpt' => $lastFailure['response_excerpt'] ?? null,
+        'api_error' => $lastFailure['api_error'] ?? null,
+    ]);
+
+    return null;
+}
+
+function executeGeminiApiRequest(string $url, string $jsonPayload): array
+{
+    $ch = curl_init($url);
+    if ($ch === false) {
+        return [
+            'ok' => false,
+            'error_code' => 'curl_init_failed',
+            'status_code' => 0,
+            'curl_errno' => 0,
+            'curl_error' => '',
+            'response_excerpt' => null,
+        ];
+    }
     curl_setopt_array($ch, [
         CURLOPT_RETURNTRANSFER => true,
         CURLOPT_POST => true,
         CURLOPT_HTTPHEADER => ['Content-Type: application/json'],
         CURLOPT_POSTFIELDS => $jsonPayload,
-        CURLOPT_TIMEOUT => 10,
+        CURLOPT_CONNECTTIMEOUT => GEMINI_API_CONNECT_TIMEOUT_SECONDS,
+        CURLOPT_TIMEOUT => GEMINI_API_TIMEOUT_SECONDS,
     ]);
 
     $result = curl_exec($ch);
@@ -163,36 +208,72 @@ function requestGeminiApi(string $url, array $payload): ?array
     curl_close($ch);
 
     if (!is_string($result) || $result === '' || $statusCode < 200 || $statusCode >= 300) {
-        logGeminiError('gemini_api_request_failed', [
-            'url' => $url,
+        return [
+            'ok' => false,
+            'error_code' => 'gemini_api_request_failed',
             'status_code' => $statusCode,
             'curl_errno' => $curlErrno,
             'curl_error' => $curlError,
             'response_excerpt' => is_string($result) ? mb_substr($result, 0, 500) : null,
-        ]);
-        return null;
+        ];
     }
 
     $decoded = json_decode($result, true);
     if (!is_array($decoded)) {
-        logGeminiError('gemini_api_invalid_json', [
-            'url' => $url,
+        return [
+            'ok' => false,
+            'error_code' => 'gemini_api_invalid_json',
             'status_code' => $statusCode,
+            'curl_errno' => $curlErrno,
+            'curl_error' => $curlError,
             'response_excerpt' => mb_substr($result, 0, 500),
-        ]);
-        return null;
+        ];
     }
 
     if (isset($decoded['error']) && is_array($decoded['error'])) {
-        logGeminiError('gemini_api_error_response', [
-            'url' => $url,
+        return [
+            'ok' => false,
+            'error_code' => 'gemini_api_error_response',
             'status_code' => $statusCode,
+            'curl_errno' => $curlErrno,
+            'curl_error' => $curlError,
+            'response_excerpt' => null,
             'api_error' => $decoded['error'],
-        ]);
-        return null;
+        ];
     }
 
-    return $decoded;
+    return [
+        'ok' => true,
+        'decoded' => $decoded,
+    ];
+}
+
+function shouldRetryGeminiApiRequest(array $failure): bool
+{
+    $curlErrno = (int)($failure['curl_errno'] ?? 0);
+    if (in_array($curlErrno, [CURLE_OPERATION_TIMEDOUT, CURLE_COULDNT_CONNECT, CURLE_COULDNT_RESOLVE_HOST], true)) {
+        return true;
+    }
+
+    $statusCode = (int)($failure['status_code'] ?? 0);
+    return $statusCode === 0 || $statusCode === 429 || ($statusCode >= 500 && $statusCode < 600);
+}
+
+function redactGeminiApiKeyFromUrl(string $url): string
+{
+    $redacted = preg_replace('/([?&]key=)[^&]*/', '$1[REDACTED]', $url);
+    return is_string($redacted) ? $redacted : $url;
+}
+
+function redactSensitiveGeminiContext(array $context): array
+{
+    array_walk_recursive($context, static function (&$value): void {
+        if (is_string($value)) {
+            $value = redactGeminiApiKeyFromUrl($value);
+        }
+    });
+
+    return $context;
 }
 
 function logGeminiError(string $errorCode, array $context = []): void
@@ -201,7 +282,7 @@ function logGeminiError(string $errorCode, array $context = []): void
         'timestamp' => gmdate('c'),
         'error' => $errorCode,
         'component' => 'gemini_message_classifier',
-        'context' => $context,
+        'context' => redactSensitiveGeminiContext($context),
     ];
 
     $line = json_encode($record, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
