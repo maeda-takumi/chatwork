@@ -2,7 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/config.php';
-const GEMINI_MODEL = 'gemini-3.1-flash-lite-preview';
+const GEMINI_MODEL = 'gemma-3-27b-it';
 const GEMINI_API_ENDPOINT = 'https://generativelanguage.googleapis.com/v1beta/models/';
 
 const GEMINI_ERROR_LOG_FILE = __DIR__ . '/webhook_error.log';
