@@ -1,7 +1,12 @@
 <?php
 declare(strict_types=1);
 
+require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth.php';
 require_once __DIR__ . '/chatwork_download_api.php';
+
+$pdo = get_db();
+app_require_viewer($pdo);
 
 $roomId = (int)($_GET['room_id'] ?? 0);
 $fileId = trim((string)($_GET['file_id'] ?? ''));

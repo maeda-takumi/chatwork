@@ -918,3 +918,39 @@ code {
   letter-spacing: .08em;
   z-index: 2;
 }
+.header-viewer {
+  display: flex;
+  align-items: center;
+  gap: .7rem;
+  margin-left: auto;
+  color: var(--muted);
+  font-size: .9rem;
+}
+
+.header-viewer form {
+  margin: 0;
+}
+
+.logout-button {
+  padding: .45rem .8rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255,255,255,.2);
+  background: rgba(255,255,255,.08);
+  color: var(--text);
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.logout-button:hover {
+  background: rgba(248,113,113,.2);
+  border-color: rgba(248,113,113,.45);
+}
+
+.login-card {
+  max-width: 720px;
+  margin: 2rem auto;
+}
+
+.login-form {
+  margin-top: 1rem;
+}

@@ -51,10 +51,11 @@ function call_chatwork_messages_api(string $method, string $path, array $payload
 }
 
 $pdo = get_db();
+$currentViewer = app_require_viewer($pdo);
 $q = trim((string)($_GET['q'] ?? ''));
 $selectedRoomId = trim((string)($_GET['room_id'] ?? ''));
 $selectedTarget = trim((string)($_GET['target'] ?? ''));
-$selectedViewerAccountId = trim((string)($_GET['viewer_account_id'] ?? ''));
+$selectedViewerAccountId = trim((string)($currentViewer['account_id'] ?? ''));
 $flaggedOnly = trim((string)($_GET['flagged'] ?? '')) === '1';
 $selectedTypes = $_GET['type'] ?? [];
 if (!is_array($selectedTypes)) {
@@ -67,9 +68,6 @@ $perPage = 30;
 $rooms = $pdo->query('SELECT id, room_id, room_name, room_icon FROM room ORDER BY room_name ASC')->fetchAll(PDO::FETCH_ASSOC);
 
 $users = $pdo->query('SELECT account_id, user_name, user_icon FROM users ORDER BY user_name ASC')->fetchAll(PDO::FETCH_ASSOC);
-if ($selectedViewerAccountId === '' && isset($users[0])) {
-    $selectedViewerAccountId = trim((string)($users[0]['account_id'] ?? ''));
-}
 function sqlite_table_exists(PDO $pdo, string $tableName): bool
 {
     $stmt = $pdo->prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = :table_name LIMIT 1");
@@ -612,7 +610,6 @@ function build_query(array $overrides = []): string
         'q' => trim((string)($_GET['q'] ?? '')),
         'room_id' => trim((string)($_GET['room_id'] ?? '')),
         'target' => trim((string)($_GET['target'] ?? '')),
-        'viewer_account_id' => trim((string)($_GET['viewer_account_id'] ?? '')),
         'flagged' => trim((string)($_GET['flagged'] ?? '')),
         'type' => $_GET['type'] ?? [],
         'page' => (string)max(1, (int)($_GET['page'] ?? 1)),
@@ -691,19 +688,6 @@ include __DIR__ . '/header.php';
             <?php endforeach; ?>
             </div>
         </div>
-        </label>
-        <label>閲覧者
-          <select name="viewer_account_id" data-viewer-select>
-            <?php foreach ($users as $user): ?>
-              <?php
-                $viewerAccountId = (string)($user['account_id'] ?? '');
-                $viewerName = trim((string)($user['user_name'] ?? '')) ?: ('account_id: ' . $viewerAccountId);
-              ?>
-              <option value="<?php echo htmlspecialchars($viewerAccountId, ENT_QUOTES, 'UTF-8'); ?>" <?php echo $selectedViewerAccountId === $viewerAccountId ? 'selected' : ''; ?>>
-                <?php echo htmlspecialchars($viewerName, ENT_QUOTES, 'UTF-8'); ?>
-              </option>
-            <?php endforeach; ?>
-          </select>
         </label>
         <label class="flagged-filter-label">
           <input type="checkbox" name="flagged" value="1" <?php echo $flaggedOnly ? 'checked' : ''; ?> data-auto-submit>

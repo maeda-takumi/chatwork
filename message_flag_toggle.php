@@ -2,6 +2,7 @@
 declare(strict_types=1);
 
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth.php';
 
 header('Content-Type: application/json; charset=UTF-8');
 
@@ -21,7 +22,14 @@ if (!is_array($payload)) {
 
 $id = (int)($payload['id'] ?? 0);
 $flagged = (bool)($payload['flagged'] ?? false);
-$accountId = trim((string)($payload['account_id'] ?? ''));
+$pdo = get_db();
+$viewer = app_find_viewer($pdo, app_current_viewer_account_id());
+if ($viewer === null) {
+    http_response_code(401);
+    echo json_encode(['ok' => false, 'error' => 'viewer_required'], JSON_UNESCAPED_UNICODE);
+    exit;
+}
+$accountId = trim((string)($viewer['account_id'] ?? ''));
 
 if ($id <= 0 || $accountId === '') {
     http_response_code(422);
@@ -29,7 +37,6 @@ if ($id <= 0 || $accountId === '') {
     exit;
 }
 
-$pdo = get_db();
 $messageStmt = $pdo->prepare('SELECT id FROM message WHERE id = :id LIMIT 1');
 $messageStmt->execute([':id' => $id]);
 if (!is_array($messageStmt->fetch(PDO::FETCH_ASSOC))) {

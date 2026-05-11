@@ -1,7 +1,9 @@
 <?php
 require_once __DIR__ . '/db.php';
+require_once __DIR__ . '/auth.php';
 
 $pdo = get_db();
+$currentViewer = app_require_viewer($pdo);
 $error = '';
 
 function users_has_star_column(PDO $pdo): bool
