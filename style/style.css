@@ -954,3 +954,63 @@ code {
 .login-form {
   margin-top: 1rem;
 }
+
+.login-form label {
+  gap: .55rem;
+  color: rgba(230, 236, 255, .9);
+  font-weight: 700;
+}
+
+.login-form select {
+  width: 100%;
+  min-height: 48px;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1px solid rgba(255, 255, 255, .22);
+  border-radius: 14px;
+  padding: .85rem 3rem .85rem 1rem;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  letter-spacing: .01em;
+  cursor: pointer;
+  background:
+    linear-gradient(45deg, transparent 50%, #fff 50%) right 1.18rem center / 8px 8px no-repeat,
+    linear-gradient(135deg, #fff 50%, transparent 50%) right .82rem center / 8px 8px no-repeat,
+    linear-gradient(90deg, rgba(139, 92, 246, .2), rgba(6, 182, 212, .14)),
+    rgba(255, 255, 255, .08);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, .08), 0 12px 28px rgba(5, 8, 20, .18);
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .18s ease;
+}
+
+.login-form select:hover {
+  border-color: rgba(6, 182, 212, .58);
+  background:
+    linear-gradient(45deg, transparent 50%, #fff 50%) right 1.18rem center / 8px 8px no-repeat,
+    linear-gradient(135deg, #fff 50%, transparent 50%) right .82rem center / 8px 8px no-repeat,
+    linear-gradient(90deg, rgba(139, 92, 246, .28), rgba(6, 182, 212, .2)),
+    rgba(255, 255, 255, .1);
+}
+
+.login-form select:focus {
+  outline: none;
+  border-color: rgba(6, 182, 212, .9);
+  box-shadow: 0 0 0 4px rgba(6, 182, 212, .18), 0 14px 34px rgba(5, 8, 20, .25);
+}
+
+.login-form select:active {
+  transform: translateY(1px);
+}
+
+.login-form select option {
+  color: #0f172a;
+  background: #f8fbff;
+}
+
+.login-form button {
+  min-height: 44px;
+  border-radius: 999px;
+  padding: .65rem 1.25rem;
+  font-weight: 800;
+  box-shadow: 0 12px 28px rgba(6, 182, 212, .2);
+}
